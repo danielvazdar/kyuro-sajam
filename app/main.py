@@ -38,6 +38,7 @@ MAKS_FOTOGRAFIJA_B = 15 * 1024 * 1024
 MAKS_STRANICA_PX = 2400  # dovoljno za sitan tekst slipa, a zahtjev ostaje brz
 MAKS_CITANJA_NA_SAT = 60  # granica troška ako lozinka ikad procuri
 MAKS_RACUNA = 40
+MAKS_FOTOGRAFIJA = 10  # više fotografija iz galerije; svaka se čita zasebno
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,253}\.[A-Za-z]{2,}$")
 _SESIJA = re.compile(r"^[0-9a-f]{32}$")
 
@@ -187,7 +188,7 @@ def eura(popis: Popis) -> str:
 
 
 class Slanje(Popis):
-    sesija: str | None = None
+    sesije: list[str] = Field(default_factory=list, max_length=MAKS_FOTOGRAFIJA)
     email: str = Field(max_length=254)
     ime: str = Field(default="", max_length=80)
     tvrtka: str = Field(default="", max_length=120)
@@ -201,12 +202,12 @@ class Slanje(Popis):
             raise ValueError("neispravna adresa")
         return vrijednost
 
-    @field_validator("sesija")
+    @field_validator("sesije")
     @classmethod
-    def _sesija(cls, vrijednost: str | None) -> str | None:
-        if vrijednost is not None and not _SESIJA.match(vrijednost):
+    def _sesije(cls, vrijednosti: list[str]) -> list[str]:
+        if any(not _SESIJA.match(v) for v in vrijednosti):
             raise ValueError("neispravna sesija")
-        return vrijednost
+        return list(dict.fromkeys(vrijednosti))  # bez duplikata, redoslijed ostaje
 
 
 def _biljeska(slanje: Slanje) -> str:
@@ -227,16 +228,14 @@ def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[s
     # Lead se upisuje PRVI: ako mail ili Attio padnu, posjetitelj nije izgubljen.
     dnevnik.upisi(p.data_dir, {
         "dogadaj": "lead", "email": slanje.email, "ime": slanje.ime, "tvrtka": slanje.tvrtka,
-        "racuna": len(slanje.racuni), "sesija": slanje.sesija, "test": test,
+        "racuna": len(slanje.racuni), "sesije": slanje.sesije, "test": test,
     })
 
-    fotografija = None
-    if slanje.sesija:
-        putanja = _mapa_sesije(p, slanje.sesija) / "fotografija.jpg"
-        fotografija = putanja.read_bytes() if putanja.exists() else None
+    putanje = (_mapa_sesije(p, sesija) / "fotografija.jpg" for sesija in slanje.sesije)
+    fotografije = [putanja.read_bytes() for putanja in putanje if putanja.exists()]
 
     poruka = posta.sastavi(p, primatelj=slanje.email, ime=slanje.ime, racuni=slanje.racuni,
-                           eura=datoteka_eura(slanje.racuni), fotografija=fotografija)
+                           eura=datoteka_eura(slanje.racuni), fotografije=fotografije)
     try:
         poruka_id = posta.posalji(p, poruka)
     except posta.GreskaSlanja as greska:

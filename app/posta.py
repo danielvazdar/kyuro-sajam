@@ -61,20 +61,27 @@ def sastavi(
     ime: str,
     racuni: Sequence[Racun],
     eura: str,
-    fotografija: bytes | None,
+    fotografije: Sequence[bytes],
 ) -> dict[str, object]:
     privitci = [
         _privitak("eURA.txt", eura.encode("ascii")),
         _privitak("pregled-racuna.csv", pregled_csv(racuni)),
     ]
-    if fotografija:
-        privitci.append(_privitak("fotografija.jpg", fotografija))
+    if len(fotografije) == 1:
+        privitci.append(_privitak("fotografija.jpg", fotografije[0]))
+    else:
+        privitci.extend(
+            _privitak(f"fotografija-{broj}.jpg", slika)
+            for broj, slika in enumerate(fotografije, start=1)
+        )
     return {
         "sender": {"email": postavke.posiljatelj_email, "name": postavke.posiljatelj_ime},
         "to": [{"email": primatelj, **({"name": ime} if ime else {})}],
         "replyTo": {"email": postavke.odgovor_na, "name": "Daniel Vazdar, Kyuro"},
         "subject": MAIL_NASLOV,
-        "htmlContent": mail_html(ime=ime, racuni=racuni, email=primatelj),
+        "htmlContent": mail_html(
+            ime=ime, racuni=racuni, email=primatelj, fotografija=len(fotografije),
+        ),
         "attachment": privitci,
         "tags": ["sajam"],
     }

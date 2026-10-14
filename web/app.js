@@ -3,6 +3,8 @@
 
 const MAKS_STRANICA = 2400 // isto kao poslužitelj; manja datoteka = brže preko mobilnih podataka
 const KLJUC_IZLAZA = 'sajam-izlaz' // mailovi koji nisu otišli zbog mreže
+const MAKS_FOTOGRAFIJA = 10 // isto kao poslužitelj
+const ISTODOBNO = 3 // fotografije koje se čitaju u isto vrijeme
 
 const POLJA = [
   { ime: 'dobavljac', oznaka: 'Dobavljač', vrsta: 'text', siroko: true },
@@ -25,7 +27,7 @@ const IZNOSI = new Set(POLJA.filter((p) => p.vrsta === 'iznos').map((p) => p.ime
 const $ = (id) => document.getElementById(id)
 const KORACI = ['korak-prijava', 'korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
 
-let stanje = { korak: 'korak-foto', prije: null, sesija: null, racuni: [], uklonjen: null, otvoren: null }
+let stanje = { korak: 'korak-foto', prije: null, sesije: [], racuni: [], uklonjen: null, otvoren: null }
 
 function postavi(izmjene) {
   stanje = { ...stanje, ...izmjene }
@@ -83,13 +85,59 @@ async function smanji(datoteka) {
   }
 }
 
+async function procitajJednu(datoteka) {
+  const obrazac = new FormData()
+  obrazac.append('fotografija', await smanji(datoteka), 'fotografija.jpg')
+  const odgovor = await api('api/procitaj', { method: 'POST', body: obrazac })
+  return odgovor.json()
+}
+
+// Čita sve fotografije, najviše ISTODOBNO odjednom. Jedna loša fotografija ne ruši ostale.
+async function procitajSve(datoteke, napredak) {
+  const ishodi = Array.from({ length: datoteke.length })
+  let sljedeca = 0
+  let gotovo = 0
+  async function radnik() {
+    while (sljedeca < datoteke.length) {
+      const i = sljedeca++
+      try {
+        ishodi[i] = { ok: true, ...(await procitajJednu(datoteke[i])) }
+      } catch (greska) {
+        ishodi[i] = { ok: false, greska }
+      }
+      napredak(++gotovo)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ISTODOBNO, datoteke.length) }, radnik))
+  return ishodi
+}
+
+// Isti račun na dvije fotografije (preklapanje kadrova) ulazi jednom.
+function bezDuplikata(racuni) {
+  const vidjeni = new Set()
+  return racuni.filter((r) => {
+    if (!r.oib_dobavljaca || !r.broj_racuna) return true
+    const kljuc = `${r.oib_dobavljaca}|${r.broj_racuna}`
+    if (vidjeni.has(kljuc)) return false
+    vidjeni.add(kljuc)
+    return true
+  })
+}
+
+function opisGreske(greska) {
+  return greska instanceof TypeError ? 'Nema interneta. Provjerite mrežu i pokušajte ponovno.' : greska.message
+}
+
 async function ucitajFotografiju(dogadaj) {
-  const datoteka = dogadaj.target.files?.[0]
+  const datoteke = [...(dogadaj.target.files ?? [])].slice(0, MAKS_FOTOGRAFIJA)
+  const previse = (dogadaj.target.files?.length ?? 0) > MAKS_FOTOGRAFIJA
   dogadaj.target.value = ''
-  if (!datoteka) return
+  if (datoteke.length === 0) return
   poruka('')
-  const pregled = URL.createObjectURL(datoteka)
+  const pregled = URL.createObjectURL(datoteke[0])
   $('pregled-foto').src = pregled
+  const opis = datoteke.length === 1 ? 'Čitam račune…' : `Čitam ${datoteke.length} fotografija…`
+  $('citanje-tekst').textContent = opis
   postavi({ korak: 'korak-citanje' })
 
   const pocetak = Date.now()
@@ -97,19 +145,29 @@ async function ucitajFotografiju(dogadaj) {
     $('citanje-sekunde').textContent = `${Math.round((Date.now() - pocetak) / 1000)} s`
   }, 500)
   try {
-    const obrazac = new FormData()
-    obrazac.append('fotografija', await smanji(datoteka), 'fotografija.jpg')
-    const odgovor = await api('api/procitaj', { method: 'POST', body: obrazac })
-    const { sesija, racuni } = await odgovor.json()
+    const ishodi = await procitajSve(datoteke, (gotovo) => {
+      if (datoteke.length > 1) $('citanje-tekst').textContent = `${opis} gotovo ${gotovo}/${datoteke.length}`
+    })
+    const uspjesni = ishodi.filter((i) => i.ok)
+    const neuspjesni = ishodi.filter((i) => !i.ok)
+    if (neuspjesni.some((i) => i.greska instanceof GreskaPrijave)) return // prijava je već na ekranu
+    const racuni = bezDuplikata(uspjesni.flatMap((i) => i.racuni))
     if (racuni.length === 0) {
       postavi({ korak: 'korak-foto' })
-      poruka('Na fotografiji nisam našao nijedan račun. Pokušajte bliže i s više svjetla.')
+      poruka(neuspjesni.length
+        ? opisGreske(neuspjesni[0].greska)
+        : 'Na fotografiji nisam našao nijedan račun. Pokušajte bliže i s više svjetla.')
       return
     }
-    postavi({ korak: 'korak-racuni', sesija, racuni, uklonjen: null, otvoren: null })
-  } catch (greska) {
-    postavi({ korak: 'korak-foto' })
-    poruka(greska instanceof TypeError ? 'Nema interneta. Provjerite mrežu i fotografirajte ponovno.' : greska.message)
+    postavi({
+      korak: 'korak-racuni', sesije: uspjesni.map((i) => i.sesija), racuni,
+      uklonjen: null, otvoren: null,
+    })
+    const napomene = [
+      neuspjesni.length ? `${neuspjesni.length} od ${datoteke.length} fotografija nije pročitano.` : '',
+      previse ? `Uzeto je prvih ${MAKS_FOTOGRAFIJA} fotografija.` : '',
+    ].filter(Boolean)
+    poruka(napomene.join(' '))
   } finally {
     clearInterval(sat)
     URL.revokeObjectURL(pregled)
@@ -309,7 +367,7 @@ async function posalji(dogadaj) {
   pokazi('')
 
   const tijelo = {
-    sesija: stanje.sesija,
+    sesije: stanje.sesije,
     racuni: stanje.racuni.map(bezProvjera),
     email,
     ime: String(podaci.get('ime') || '').trim(),
@@ -345,7 +403,7 @@ function noviPosjetitelj() {
 function ispocetka() {
   $('obrazac').reset()
   poruka('')
-  postavi({ korak: 'korak-foto', sesija: null, racuni: [], uklonjen: null, otvoren: null })
+  postavi({ korak: 'korak-foto', sesije: [], racuni: [], uklonjen: null, otvoren: null })
 }
 
 // ── 0. prijava ──────────────────────────────────────────────────────────────

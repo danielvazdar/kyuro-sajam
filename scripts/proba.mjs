@@ -38,9 +38,15 @@ stranica.on('pageerror', (g) => greske.push(String(g)))
 // 401 je očekivan dio probe prijave (prvo otvaranje, kriva lozinka); sve ostalo je greška.
 stranica.on('console', (p) => p.type() === 'error' && !p.text().includes('status of 401') && greske.push(p.text()))
 
+// Dvije fotografije: prva nosi INA + Konzum, druga Tisak i ponovno INA (preklapanje kadra)
+let citanja = 0
 await stranica.route('**/api/procitaj', async (ruta) => {
-  await new Promise((r) => setTimeout(r, 1500))
-  await ruta.fulfill({ json: OCITANO })
+  const broj = citanja++
+  await new Promise((r) => setTimeout(r, 1200))
+  const [ina, konzum, tisak] = OCITANO.racuni
+  await ruta.fulfill({ json: broj === 0
+    ? { sesija: 'a'.repeat(32), racuni: [ina, konzum] }
+    : { sesija: 'b'.repeat(32), racuni: [tisak, ina] } })
 })
 let poslano = null
 await stranica.route('**/api/posalji', async (ruta) => {
@@ -70,12 +76,15 @@ tvrdi(await stranica.isHidden('#korak-prijava'), 'prijava zapamćena nakon ponov
 
 // 1×1 JPEG je dovoljan: čitač je podmetnut
 const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64')
-await stranica.setInputFiles('#galerija', { name: 'list.jpg', mimeType: 'image/jpeg', buffer: jpeg })
+await stranica.setInputFiles('#galerija', [
+  { name: 'list-1.jpg', mimeType: 'image/jpeg', buffer: jpeg },
+  { name: 'list-2.jpg', mimeType: 'image/jpeg', buffer: jpeg },
+])
 await stranica.waitForSelector('#korak-citanje:not([hidden])')
 await stranica.screenshot({ path: 'snimke/2-citanje.png' })
 
 await stranica.waitForSelector('#korak-racuni:not([hidden])')
-tvrdi(await stranica.locator('.racun').count() === 3, 'tri računa na ekranu')
+tvrdi(await stranica.locator('.racun').count() === 3, 'tri računa s dvije fotografije, duplikat izbačen')
 await stranica.screenshot({ path: 'snimke/3-racuni.png', fullPage: true })
 
 // Ispravi treći račun: pravi backend mora ponovno provjeriti
@@ -112,6 +121,7 @@ await stranica.check('input[name=privola]')
 await stranica.click('#posalji')
 await stranica.waitForSelector('#korak-poslano:not([hidden])')
 tvrdi(poslano?.email === 'ana@ured.hr' && poslano.racuni.length === 3, 'poslan pravi sadržaj')
+tvrdi(JSON.stringify(poslano.sesije) === JSON.stringify(['a'.repeat(32), 'b'.repeat(32)]), 'obje fotografije idu u mail')
 tvrdi(poslano.racuni.every((r) => !('upozorenja' in r)), 'upozorenja se ne šalju natrag')
 await stranica.screenshot({ path: 'snimke/6-poslano.png' })
 

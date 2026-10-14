@@ -1,6 +1,6 @@
 // Service worker: ljuska aplikacije radi i na lošem sajamskom Wi-Fiju.
 // /api/ se NIKAD ne kešira — čitanje i slanje moraju ići na poslužitelj ili javno pasti.
-const VERZIJA = 'sajam-v2'
+const VERZIJA = 'sajam-v3'
 const LJUSKA = [
   './', 'index.html', 'stil.css', 'app.js', 'manifest.webmanifest',
   'ikone/ikona-192.png', 'ikone/ikona-512.png', 'ikone/apple-touch.png',

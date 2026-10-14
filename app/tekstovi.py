@@ -97,7 +97,15 @@ style="border-collapse:collapse;font-size:15px;margin:4px 0 8px;border-top:1px s
 </table>"""
 
 
-def _privitci() -> str:
+def _redak_fotografija(broj: int, stil: str) -> str:
+    if broj == 0:
+        return ""
+    if broj == 1:
+        return f'<div style="{stil}"><b>fotografija.jpg</b> · fotografija lista s računima</div>'
+    return (f'<div style="{stil}"><b>fotografija-1 … {broj}.jpg</b> · fotografije računa</div>')
+
+
+def _privitci(fotografija: int) -> str:
     stavka = "padding:6px 0;font-size:14px"
     return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
 style="background:{_PAPIR};border-radius:10px;margin:20px 0">
@@ -106,7 +114,7 @@ style="background:{_PAPIR};border-radius:10px;margin:20px 0">
 margin-bottom:6px">U privitku</div>
 <div style="{stavka}"><b>eURA.txt</b> · knjiga ulaznih računa za uvoz u Synesis</div>
 <div style="{stavka}"><b>pregled-racuna.csv</b> · isti podaci pripremljeni za Excel</div>
-<div style="{stavka}"><b>fotografija.jpg</b> · fotografija lista s računima</div>
+{_redak_fotografija(fotografija, stavka)}
 </td></tr></table>"""
 
 
@@ -141,7 +149,9 @@ font-weight:bold;font-size:15px;text-decoration:none">Odaberite termin za razgov
 </td></tr></table>"""
 
 
-def mail_html(*, ime: str, racuni: Sequence[Racun], email: str = "") -> str:
+def mail_html(
+    *, ime: str, racuni: Sequence[Racun], email: str = "", fotografija: int = 1,
+) -> str:
     """Sve što stiže od posjetitelja (ime, podaci računa) escapea se ovdje."""
     pozdrav = f"Poštovani {_esc(ime)}," if ime else "Poštovani,"
     tijelo = f"""
@@ -150,7 +160,7 @@ def mail_html(*, ime: str, racuni: Sequence[Racun], email: str = "") -> str:
 Kao što sam Vam pokazao na mobitelu, u privitku šaljem eURA.txt datoteku za Synesis,
 složenu iz računa koje smo zajedno fotografirali:</p>
 {_tablica(racuni)}
-{_privitci()}
+{_privitci(fotografija)}
 {_koraci()}
 <p style="margin:16px 0 0;color:{_TINTA_2};font-size:13px">Ovo je pokazni primjer: računi
 označeni s „provjeriti” zahtijevaju Vaš pregled, a datoteku je najbolje prvo učitati u

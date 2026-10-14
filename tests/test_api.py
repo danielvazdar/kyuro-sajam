@@ -141,7 +141,7 @@ def test_test_adresa_ne_ide_u_attio(klijent: TestClient, monkeypatch: pytest.Mon
     {"privola": False},
     {"email": "nije-adresa"},
     {"racuni": []},
-    {"sesija": "../../etc"},
+    {"sesije": ["../../etc"]},
 ])
 def test_neispravno_slanje_se_odbija(
     klijent: TestClient, monkeypatch: pytest.MonkeyPatch, izmjena: dict[str, Any],
@@ -181,3 +181,21 @@ def test_token_istekne_i_ne_da_se_krivotvoriti() -> None:
     assert not prijava.vrijedi(token, "druga-tajna", sada=2000)
     istek, potpis = token.split(".")
     assert not prijava.vrijedi(f"{int(istek) + 999}.{potpis}", "tajna", sada=2000)
+
+
+def test_vise_fotografija_ide_u_privitak(
+    klijent: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    sesije = []
+    for _ in range(2):
+        monkeypatch.setattr(main, "procitaj", lambda *_a: [RACUN])
+        odgovor = klijent.post("/api/procitaj",
+                               files={"fotografija": ("a.jpg", _jpeg(), "image/jpeg")})
+        sesije.append(odgovor.json()["sesija"])
+    poslano: list[dict[str, Any]] = []
+    monkeypatch.setattr(posta, "posalji", lambda _p, poruka: poslano.append(poruka) or "id")
+    monkeypatch.setattr(crm, "upisi_lead", lambda _a, **_kw: "osoba")
+    klijent.post("/api/posalji", json=_slanje(sesije=[*sesije, sesije[0]]))
+    imena = [p["name"] for p in poslano[0]["attachment"]]
+    assert imena == ["eURA.txt", "pregled-racuna.csv", "fotografija-1.jpg", "fotografija-2.jpg"]
+    assert "fotografija-1 … 2.jpg" in str(poslano[0]["htmlContent"])
