@@ -23,3 +23,10 @@
 - Daniel: ova mala samostalna app ostaje **njegova i licencira se** (ne instalira se kod klijenta). Pravilo „alat živi kod klijenta" vrijedi za veće sustave po mjeri.
 - Tržište je malo: od 1.1.2026 domaći R1 stižu kao eRačun (Synesis ih knjiži besplatno). Ostaju slipovi (trajno izuzeti) i strani računi → tako se i prodaje. App je ulaz u veliki demo (demo.kyuro.tech, PWA na tabletu).
 - Cijena nije odlučena → issue #3.
+
+## 2026-10-14 — cijena i isporuka (Daniel)
+- **29 €/mj po uredu, do 500 dokumenata** (+10 € za svakih dodatnih 500). **Probni rok 7 dana** besplatno.
+- Naplata **računom iz Fakturka** (virman), bez kartičnog plaćanja zasad.
+- Isporuka: PWA s poveznice + login po uredu, **bez trgovina aplikacija**. Daniel je hosta i licencira.
+- Prije prvog kupca: računi po uredu (multi-tenant), brojač dokumenata, brisanje fotografija nakon 30 dana, DPA.
+- Odbačeno: 1.000 € + 50 €/mj (prevelik ulaz za tako malu app), 49 €/mj, 30-dnevni probni rok.
