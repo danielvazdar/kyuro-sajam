@@ -18,3 +18,8 @@
 ## 2026-10-14 — podaci posjetitelja PRVI, ne zadnji
 - Daniel: lead prije demonstracije. `/api/lead` upisuje dnevnik + Attio odmah; slanje na kraju je jedan dodir.
 - „Novi posjetitelj, isti računi”: novi lead, bez ponovnog čitanja istog lista.
+
+## 2026-10-14 — licenca i položaj aplikacije
+- Daniel: ova mala samostalna app ostaje **njegova i licencira se** (ne instalira se kod klijenta). Pravilo „alat živi kod klijenta" vrijedi za veće sustave po mjeri.
+- Tržište je malo: od 1.1.2026 domaći R1 stižu kao eRačun (Synesis ih knjiži besplatno). Ostaju slipovi (trajno izuzeti) i strani računi → tako se i prodaje. App je ulaz u veliki demo (demo.kyuro.tech, PWA na tabletu).
+- Cijena nije odlučena → issue #3.
