@@ -85,15 +85,42 @@ async function smanji(datoteka) {
   }
 }
 
-async function procitajJednu(datoteka) {
-  const obrazac = new FormData()
-  obrazac.append('fotografija', await smanji(datoteka), 'fotografija.jpg')
-  const odgovor = await api('api/procitaj', { method: 'POST', body: obrazac })
-  return odgovor.json()
+// XHR umjesto fetcha: samo XHR javlja kad je upload gotov, pa se vidi gdje vrijeme odlazi —
+// priprema na mobitelu, slanje preko mreže ili čitanje na poslužitelju.
+function posaljiFotografiju(slika, faza) {
+  return new Promise((gotovo, odbijeno) => {
+    const zahtjev = new XMLHttpRequest()
+    zahtjev.open('POST', 'api/procitaj')
+    zahtjev.withCredentials = true
+    zahtjev.upload.onload = () => faza('citanje')
+    zahtjev.onerror = () => odbijeno(new TypeError('mreža'))
+    zahtjev.onload = () => {
+      if (zahtjev.status === 401) {
+        if (stanje.korak !== 'korak-prijava') postavi({ korak: 'korak-prijava', prije: 'korak-foto' })
+        return odbijeno(new GreskaPrijave('Prijavite se pa pokušajte ponovno.'))
+      }
+      let tijelo = {}
+      try { tijelo = JSON.parse(zahtjev.responseText) } catch { /* prazno tijelo */ }
+      if (zahtjev.status >= 400) {
+        return odbijeno(new GreskaPoslužitelja(typeof tijelo.detail === 'string' ? tijelo.detail : 'Čitanje nije uspjelo.'))
+      }
+      gotovo(tijelo)
+    }
+    const obrazac = new FormData()
+    obrazac.append('fotografija', slika, 'fotografija.jpg')
+    zahtjev.send(obrazac)
+  })
+}
+
+async function procitajJednu(datoteka, faza) {
+  faza('priprema')
+  const slika = await smanji(datoteka)
+  faza('slanje')
+  return posaljiFotografiju(slika, faza)
 }
 
 // Čita sve fotografije, najviše ISTODOBNO odjednom. Jedna loša fotografija ne ruši ostale.
-async function procitajSve(datoteke, napredak) {
+async function procitajSve(datoteke, napredak, faza) {
   const ishodi = Array.from({ length: datoteke.length })
   let sljedeca = 0
   let gotovo = 0
@@ -101,7 +128,7 @@ async function procitajSve(datoteke, napredak) {
     while (sljedeca < datoteke.length) {
       const i = sljedeca++
       try {
-        ishodi[i] = { ok: true, ...(await procitajJednu(datoteke[i])) }
+        ishodi[i] = { ok: true, ...(await procitajJednu(datoteke[i], (f) => faza(i, f))) }
       } catch (greska) {
         ishodi[i] = { ok: false, greska }
       }
@@ -144,10 +171,32 @@ async function ucitajFotografiju(dogadaj) {
   const sat = setInterval(() => {
     $('citanje-sekunde').textContent = `${Math.round((Date.now() - pocetak) / 1000)} s`
   }, 500)
+  // Faza svake fotografije i trajanje svake faze (zbroj preko fotografija, u sekundama).
+  const faze = datoteke.map(() => null)
+  const pocetakFaze = datoteke.map(() => Date.now())
+  const trajanje = { priprema: 0, slanje: 0, citanje: 0 }
+  let gotovih = 0
+  const osvjeziOpis = () => {
+    const aktivne = faze.filter((f) => f && f !== 'gotovo')
+    const faza = ['priprema', 'slanje', 'citanje'].find((f) => aktivne.includes(f))
+    const tekst = { priprema: 'Pripremam fotografiju…', slanje: 'Šaljem…', citanje: 'Čitam račune…' }[faza] ?? opis
+    $('citanje-tekst').textContent = datoteke.length > 1 ? `${tekst} ${gotovih}/${datoteke.length}` : tekst
+  }
+  const promijeniFazu = (i, faza) => {
+    if (faze[i]) trajanje[faze[i]] += (Date.now() - pocetakFaze[i]) / 1000
+    faze[i] = faza
+    pocetakFaze[i] = Date.now()
+    osvjeziOpis()
+  }
   try {
     const ishodi = await procitajSve(datoteke, (gotovo) => {
-      if (datoteke.length > 1) $('citanje-tekst').textContent = `${opis} gotovo ${gotovo}/${datoteke.length}`
-    })
+      gotovih = gotovo
+      osvjeziOpis()
+    }, (i, faza) => promijeniFazu(i, faza))
+    datoteke.forEach((_, i) => promijeniFazu(i, 'gotovo'))
+    const s = (x) => `${Math.round(x)} s`
+    $('mjerenje').textContent = `Priprema ${s(trajanje.priprema)} · slanje ${s(trajanje.slanje)} · `
+      + `čitanje ${s(trajanje.citanje)} · ukupno ${s((Date.now() - pocetak) / 1000)}`
     const uspjesni = ishodi.filter((i) => i.ok)
     const neuspjesni = ishodi.filter((i) => !i.ok)
     if (neuspjesni.some((i) => i.greska instanceof GreskaPrijave)) return // prijava je već na ekranu
