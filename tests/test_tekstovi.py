@@ -37,3 +37,20 @@ def test_znacka_stane_u_jedan_redak() -> None:
     assert ">OK</span>" in html
     assert "u redu" not in html
     assert "white-space:nowrap;" in html
+
+
+def test_popis_racuna_nema_stupaca() -> None:
+    # 14.10.: iPhone Mail odbaci nowrap pa se uski stupac s iznosom stisne na jedno slovo.
+    html = mail_html(ime="", racuni=[RACUN, RACUN])
+    tablica = html[html.index("<b>&lt;b&gt;Zli"):html.index("U privitku")]
+    for redak in tablica.split("<tr>")[1:]:
+        assert redak.count("<td") == 1
+
+
+def test_mnozina_dokumenata() -> None:
+    from app.tekstovi import _dokumenata
+
+    assert [_dokumenata(n) for n in (1, 3, 5, 11, 12, 21, 22)] == [
+        "1 dokument", "3 dokumenta", "5 dokumenata", "11 dokumenata", "12 dokumenata",
+        "21 dokument", "22 dokumenta",
+    ]

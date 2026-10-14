@@ -46,27 +46,27 @@ def _znacka(cist: bool) -> str:
     boja, pozadina, tekst = (
         (_KADULJA, _KADULJA_SV, "OK") if cist else (_JANTAR, _JANTAR_SV, "provjeriti")
     )
-    return (f'<span style="display:inline-block;margin-top:4px;padding:2px 8px;'
+    return (f'<span style="display:inline-block;padding:2px 8px;'
             f"border-radius:10px;white-space:nowrap;background:{pozadina};color:{boja};"
             f'font-size:12px;font-weight:bold">{tekst}</span>')
 
 
 def _redak(racun: Racun) -> str:
-    """Dva stupca: lijevo tko i što, desno iznos sa značkom ispod.
+    """Jedan stupac, sve složeno odozgo prema dolje.
 
-    14.10.: tri stupca nisu stala na iPhone — iznos i „provjeriti" lomili su se po slovima.
+    14.10.: i tri i dva stupca raspala su se u iPhone Mailu — klijent odbaci
+    `white-space:nowrap`, pa se uski stupac s iznosom stisnuo na jedno slovo.
+    Bez stupaca nema se što stisnuti.
     """
     cist = not upozorenja(racun) and not racun.nesigurno
-    celija = f"padding:12px 0;border-bottom:1px solid {_RUB};vertical-align:top"
     vrsta = "Slip" if racun.vrsta == "slip" else "Račun"
     return (
-        "<tr>"
-        f'<td style="{celija};padding-right:12px"><b>{_esc(racun.dobavljac)}</b><br>'
+        f'<tr><td style="padding:12px 0;border-bottom:1px solid {_RUB}">'
+        f"<b>{_esc(racun.dobavljac)}</b><br>"
         f'<span style="color:{_TINTA_2};font-size:13px">{vrsta} {_esc(racun.broj_racuna)}'
-        f"<br>{racun.datum_racuna:%d.%m.%Y.}</span></td>"
-        f'<td style="{celija};text-align:right;white-space:nowrap;width:1%">'
-        f"<b>{_eur(racun.ukupno)}</b><br>{_znacka(cist)}</td>"
-        "</tr>"
+        f" · {racun.datum_racuna:%d.%m.%Y.}</span><br>"
+        f'<b style="font-size:16px">{_eur(racun.ukupno)}</b>&nbsp;&nbsp;{_znacka(cist)}'
+        "</td></tr>"
     )
 
 
@@ -77,15 +77,23 @@ height:28px;width:130px;font:bold 24px {_FONT};color:{_TINTA}">
 </td></tr>"""
 
 
+def _dokumenata(broj: int) -> str:
+    """Hrvatska množina: 1 dokument, 2–4 dokumenta, 5+ (i 11–14) dokumenata."""
+    if broj % 10 == 1 and broj % 100 != 11:
+        return f"{broj} dokument"
+    if 2 <= broj % 10 <= 4 and not 12 <= broj % 100 <= 14:
+        return f"{broj} dokumenta"
+    return f"{broj} dokumenata"
+
+
 def _tablica(racuni: Sequence[Racun]) -> str:
     ukupno = sum((r.ukupno for r in racuni), Decimal("0"))
     return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
 style="border-collapse:collapse;font-size:15px;margin:4px 0 8px;border-top:1px solid {_RUB}">
 {"".join(_redak(r) for r in racuni)}
-<tr><td style="padding:14px 12px 0 0"><b>Ukupno</b>
-<span style="color:{_TINTA_2};font-size:13px">· {len(racuni)} dok.</span></td>
-<td style="padding:14px 0 0;text-align:right;white-space:nowrap;width:1%">
-<b>{_eur(ukupno)}</b></td></tr></table>"""
+<tr><td style="padding:14px 0 0"><b>Ukupno: {_eur(ukupno)}</b>
+<span style="color:{_TINTA_2};font-size:13px">· {_dokumenata(len(racuni))}</span></td></tr>
+</table>"""
 
 
 def _privitci() -> str:
