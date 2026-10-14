@@ -33,8 +33,34 @@
       </form>
     </section>
 
-    <!-- 1. Fotografija -->
-    <section id="korak-foto" class="korak">
+    <!-- 1. Posjetitelj — PRVI korak: lead prije demonstracije (Daniel, 14.10.) -->
+    <section id="korak-posjetitelj" class="korak">
+      <h1>Krenimo s Vašim podacima</h1>
+      <p class="tiho">Na ovu adresu stižu računi koje ćemo zajedno očitati, spremni za Synesis.</p>
+      <form id="obrazac" class="obrazac" novalidate>
+        <label>E-mail <span class="obavezno">*</span>
+          <input type="email" name="email" autocomplete="email" inputmode="email" required>
+        </label>
+        <label>Ime i prezime
+          <input type="text" name="ime" autocomplete="name" maxlength="80">
+        </label>
+        <label>Ured / tvrtka
+          <input type="text" name="tvrtka" autocomplete="organization" maxlength="120">
+        </label>
+        <label class="privola">
+          <input type="checkbox" name="privola" required>
+          <span>Slažem se da mi Kyuro pošalje očitane račune i javi se u vezi s
+            automatizacijom knjiženja. Podatke ne dijelimo s trećima.
+            <a href="https://kyuro.tech/privacy" target="_blank" rel="noopener">Privatnost</a></span>
+        </label>
+        <p class="greska" id="obrazac-greska" role="alert" hidden></p>
+        <button type="submit" class="gumb glavni velik" id="zapocni">Započni</button>
+      </form>
+    </section>
+
+    <!-- 2. Fotografija -->
+    <section id="korak-foto" class="korak" hidden>
+      <p class="za-koga" id="za-koga"></p>
       <h1>Fotografirajte list s računima</h1>
       <p class="tiho">Jedna fotografija, svi računi i slipovi odjednom.</p>
       <label class="gumb glavni velik">
@@ -81,26 +107,8 @@
         <a class="gumb sporedni" id="preuzmi" download="eURA.txt">Preuzmi</a>
       </div>
 
-      <form id="obrazac" class="obrazac" novalidate>
-        <h2>Pošaljite si sve na mail</h2>
-        <label>E-mail <span class="obavezno">*</span>
-          <input type="email" name="email" autocomplete="email" inputmode="email" required>
-        </label>
-        <label>Ime i prezime
-          <input type="text" name="ime" autocomplete="name" maxlength="80">
-        </label>
-        <label>Ured / tvrtka
-          <input type="text" name="tvrtka" autocomplete="organization" maxlength="120">
-        </label>
-        <label class="privola">
-          <input type="checkbox" name="privola" required>
-          <span>Slažem se da mi Kyuro pošalje ove datoteke i javi se u vezi s
-            automatizacijom knjiženja. Podatke ne dijelimo s trećima.
-            <a href="https://kyuro.tech/privacy" target="_blank" rel="noopener">Privatnost</a></span>
-        </label>
-        <p class="greska" id="obrazac-greska" role="alert" hidden></p>
-        <button type="submit" class="gumb glavni velik" id="posalji">Pošalji</button>
-      </form>
+      <p class="greska" id="slanje-greska" role="alert" hidden></p>
+      <button type="button" class="gumb glavni velik" id="posalji">Pošalji</button>
     </section>
 
     <!-- 3. Poslano -->
@@ -110,8 +118,8 @@
       <p id="poslano-tekst"></p>
       <p class="tiho" id="poslano-attio" hidden>Lead nije upisan u Attio — ostao je u dnevniku
         na poslužitelju.</p>
-      <button type="button" class="gumb glavni velik" id="isti-list">Isti računi, novi posjetitelj</button>
-      <button type="button" class="gumb sporedni" id="novi-list">Novi list</button>
+      <button type="button" class="gumb glavni velik" id="novi-posjetitelj">Novi posjetitelj</button>
+      <button type="button" class="gumb sporedni" id="isti-racuni">Novi posjetitelj, isti računi</button>
     </section>
 
     <p class="greska" id="greska" role="alert" hidden></p>

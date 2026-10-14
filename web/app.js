@@ -25,9 +25,12 @@ const POLJA = [
 const IZNOSI = new Set(POLJA.filter((p) => p.vrsta === 'iznos').map((p) => p.ime))
 
 const $ = (id) => document.getElementById(id)
-const KORACI = ['korak-prijava', 'korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
+const KORACI = ['korak-prijava', 'korak-posjetitelj', 'korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
 
-let stanje = { korak: 'korak-foto', prije: null, sesije: [], racuni: [], uklonjen: null, otvoren: null }
+let stanje = {
+  korak: 'korak-posjetitelj', prije: null, posjetitelj: null, zadrziRacune: false,
+  sesije: [], racuni: [], uklonjen: null, otvoren: null,
+}
 
 function postavi(izmjene) {
   stanje = { ...stanje, ...izmjene }
@@ -359,9 +362,46 @@ async function slozi() {
   }
 }
 
+// ── 1. posjetitelj ──────────────────────────────────────────────────────────
+async function zapocni(dogadaj) {
+  dogadaj.preventDefault()
+  const obrazac = $('obrazac')
+  const podaci = new FormData(obrazac)
+  const pokazi = (tekst) => { $('obrazac-greska').textContent = tekst; $('obrazac-greska').hidden = !tekst }
+  const email = String(podaci.get('email') || '').trim()
+  if (!email || !obrazac.elements.email.checkValidity()) return pokazi('Upišite ispravnu e-mail adresu.')
+  if (!podaci.get('privola')) return pokazi('Za nastavak je potrebna privola.')
+  pokazi('')
+
+  const posjetitelj = {
+    email,
+    ime: String(podaci.get('ime') || '').trim(),
+    tvrtka: String(podaci.get('tvrtka') || '').trim(),
+    privola: true,
+  }
+  $('zapocni').disabled = true
+  try {
+    await posaljiNaPosluzitelj({ putanja: 'api/lead', tijelo: posjetitelj })
+  } catch (greska) {
+    if (greska instanceof GreskaPrijave) return
+    if (!(greska instanceof TypeError)) return pokazi(greska.message)
+    spremiIzlaz([...citajIzlaz(), { putanja: 'api/lead', tijelo: posjetitelj }]) // bez mreže: demo ide dalje
+  } finally {
+    $('zapocni').disabled = false
+  }
+  obrazac.reset()
+  const nastavi = stanje.zadrziRacune && stanje.racuni.length > 0
+  postavi({ posjetitelj, zadrziRacune: false, korak: nastavi ? 'korak-racuni' : 'korak-foto' })
+}
+
 // ── 3. slanje ───────────────────────────────────────────────────────────────
+// Red za slanje bez mreže: lead i mail čekaju u pregledniku i odlaze kad se veza vrati.
 function citajIzlaz() {
-  try { return JSON.parse(localStorage.getItem(KLJUC_IZLAZA) || '[]') } catch { return [] }
+  try {
+    const popis = JSON.parse(localStorage.getItem(KLJUC_IZLAZA) || '[]')
+    // stariji zapisi (prije 14.10.) bili su samo tijelo maila
+    return popis.map((z) => (z.putanja ? z : { putanja: 'api/posalji', tijelo: z }))
+  } catch { return [] }
 }
 
 function spremiIzlaz(popis) {
@@ -378,11 +418,11 @@ function iscrtajIzlaz() {
   gumb.className = 'tekst-gumb'
   gumb.textContent = 'Pošalji sada'
   gumb.addEventListener('click', isprazniIzlaz)
-  $('izlaz').replaceChildren(`${popis.length} mail(ova) čeka internet. `, gumb)
+  $('izlaz').replaceChildren(`${popis.length} zapis(a) čeka internet. `, gumb)
 }
 
-async function posaljiJedan(tijelo) {
-  const odgovor = await api('api/posalji', {
+async function posaljiNaPosluzitelj({ putanja, tijelo }) {
+  const odgovor = await api(putanja, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(tijelo),
@@ -392,67 +432,50 @@ async function posaljiJedan(tijelo) {
 
 async function isprazniIzlaz() {
   const ostali = []
-  for (const tijelo of citajIzlaz()) {
+  for (const zapis of citajIzlaz()) {
     try {
-      await posaljiJedan(tijelo)
+      await posaljiNaPosluzitelj(zapis)
     } catch (greska) {
-      if (greska instanceof TypeError) ostali.push(tijelo) // i dalje nema mreže
+      if (greska instanceof TypeError || greska instanceof GreskaPrijave) ostali.push(zapis)
       // greška poslužitelja (npr. kriva adresa) se ne ponavlja beskonačno
     }
   }
   spremiIzlaz(ostali)
 }
 
-async function posalji(dogadaj) {
-  dogadaj.preventDefault()
-  const obrazac = $('obrazac')
-  const podaci = new FormData(obrazac)
-  const email = String(podaci.get('email') || '').trim()
-  const greskaEl = $('obrazac-greska')
-  const pokazi = (tekst) => { greskaEl.textContent = tekst; greskaEl.hidden = !tekst }
-
-  if (!obrazac.elements.email.checkValidity() || !email) return pokazi('Upišite ispravnu e-mail adresu.')
-  if (!podaci.get('privola')) return pokazi('Za slanje je potrebna privola.')
-  pokazi('')
-
-  const tijelo = {
-    sesije: stanje.sesije,
-    racuni: stanje.racuni.map(bezProvjera),
-    email,
-    ime: String(podaci.get('ime') || '').trim(),
-    tvrtka: String(podaci.get('tvrtka') || '').trim(),
-    privola: true,
+async function posalji() {
+  const { email } = stanje.posjetitelj
+  const pokazi = (tekst) => { $('slanje-greska').textContent = tekst; $('slanje-greska').hidden = !tekst }
+  const zapis = {
+    putanja: 'api/posalji',
+    tijelo: { ...stanje.posjetitelj, sesije: stanje.sesije, racuni: stanje.racuni.map(bezProvjera) },
   }
+  pokazi('')
   $('posalji').disabled = true
   try {
-    const { attio } = await posaljiJedan(tijelo)
+    const { attio } = await posaljiNaPosluzitelj(zapis)
     $('poslano-tekst').textContent = `Datoteke su na putu prema ${email}.`
     $('poslano-attio').hidden = attio
     postavi({ korak: 'korak-poslano' })
   } catch (greska) {
-    if (greska instanceof TypeError) {
-      spremiIzlaz([...citajIzlaz(), tijelo])
-      $('poslano-tekst').textContent = `Nema interneta — mail za ${email} je spremljen i otići će čim se veza vrati.`
-      $('poslano-attio').hidden = true
-      postavi({ korak: 'korak-poslano' })
-    } else {
-      pokazi(greska.message)
-    }
+    if (greska instanceof GreskaPrijave) return
+    if (!(greska instanceof TypeError)) return pokazi(greska.message)
+    spremiIzlaz([...citajIzlaz(), zapis])
+    $('poslano-tekst').textContent = `Nema interneta — mail za ${email} je spremljen i otići će čim se veza vrati.`
+    $('poslano-attio').hidden = true
+    postavi({ korak: 'korak-poslano' })
   } finally {
     $('posalji').disabled = false
   }
 }
 
-function noviPosjetitelj() {
-  $('obrazac').reset()
-  $('obrazac-greska').hidden = true
-  postavi({ korak: 'korak-datoteka' })
-}
-
-function ispocetka() {
-  $('obrazac').reset()
+function noviPosjetitelj(zadrziRacune) {
   poruka('')
-  postavi({ korak: 'korak-foto', sesije: [], racuni: [], uklonjen: null, otvoren: null })
+  if (zadrziRacune) return postavi({ korak: 'korak-posjetitelj', posjetitelj: null, zadrziRacune: true })
+  postavi({
+    korak: 'korak-posjetitelj', posjetitelj: null, zadrziRacune: false,
+    sesije: [], racuni: [], uklonjen: null, otvoren: null,
+  })
 }
 
 // ── 0. prijava ──────────────────────────────────────────────────────────────
@@ -475,7 +498,7 @@ async function prijaviSe(dogadaj) {
     $('prijava-obrazac').reset()
     greskaEl.hidden = true
     poruka('')
-    postavi({ korak: stanje.prije || 'korak-foto', prije: null })
+    postavi({ korak: stanje.prije || 'korak-posjetitelj', prije: null })
   } catch (greska) {
     greskaEl.textContent = greska instanceof TypeError ? 'Nema interneta.' : greska.message
     greskaEl.hidden = false
@@ -495,7 +518,13 @@ async function provjeriPrijavu() {
 // ── iscrtavanje ─────────────────────────────────────────────────────────────
 function iscrtaj() {
   for (const id of KORACI) $(id).hidden = id !== stanje.korak
-  $('ispocetka').hidden = ['korak-prijava', 'korak-foto', 'korak-citanje'].includes(stanje.korak)
+  $('ispocetka').hidden = ['korak-prijava', 'korak-posjetitelj', 'korak-citanje'].includes(stanje.korak)
+  if (stanje.posjetitelj) {
+    const { email, ime } = stanje.posjetitelj
+    $('za-koga').replaceChildren('Za: ', Object.assign(document.createElement('b'), { textContent: ime || email }),
+      ime ? ` · ${email}` : '')
+    $('posalji').textContent = `Pošalji na ${email}`
+  }
   if (stanje.korak === 'korak-racuni') {
     iscrtajSazetak()
     $('racuni').replaceChildren(...stanje.racuni.map(iscrtajRacun))
@@ -510,10 +539,11 @@ $('galerija').addEventListener('change', ucitajFotografiju)
 $('vrati').addEventListener('click', vrati)
 $('slozi').addEventListener('click', slozi)
 $('natrag-racuni').addEventListener('click', () => postavi({ korak: 'korak-racuni' }))
-$('obrazac').addEventListener('submit', posalji)
-$('isti-list').addEventListener('click', noviPosjetitelj)
-$('novi-list').addEventListener('click', ispocetka)
-$('ispocetka').addEventListener('click', ispocetka)
+$('obrazac').addEventListener('submit', zapocni)
+$('posalji').addEventListener('click', posalji)
+$('novi-posjetitelj').addEventListener('click', () => noviPosjetitelj(false))
+$('isti-racuni').addEventListener('click', () => noviPosjetitelj(true))
+$('ispocetka').addEventListener('click', () => noviPosjetitelj(false))
 $('prijava-obrazac').addEventListener('submit', prijaviSe)
 window.addEventListener('online', isprazniIzlaz)
 

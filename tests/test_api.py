@@ -98,7 +98,7 @@ def test_posalji_salje_mail_i_upisuje_lead(
     assert imena == ["eURA.txt", "pregled-racuna.csv"]
     assert leadovi[0]["tvrtka"] == "Ured d.o.o."
     dogadaji = [z["dogadaj"] for z in dnevnik.procitaj_sve(tmp_path)]
-    assert dogadaji == ["lead", "mail_poslan", "attio_upisan"]
+    assert dogadaji == ["slanje", "mail_poslan", "attio_upisan"]
 
 
 def test_pad_attia_ne_rusi_slanje(
@@ -124,7 +124,7 @@ def test_pad_maila_vraca_gresku_ali_lead_ostaje(
     monkeypatch.setattr(posta, "posalji", pada)
     odgovor = klijent.post("/api/posalji", json=_slanje())
     assert odgovor.status_code == 502
-    assert [z["dogadaj"] for z in dnevnik.procitaj_sve(tmp_path)] == ["lead", "mail_pao"]
+    assert [z["dogadaj"] for z in dnevnik.procitaj_sve(tmp_path)] == ["slanje", "mail_pao"]
 
 
 def test_test_adresa_ne_ide_u_attio(klijent: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -199,3 +199,37 @@ def test_vise_fotografija_ide_u_privitak(
     imena = [p["name"] for p in poslano[0]["attachment"]]
     assert imena == ["eURA.txt", "pregled-racuna.csv", "fotografija-1.jpg", "fotografija-2.jpg"]
     assert "fotografija-1 … 2.jpg" in str(poslano[0]["htmlContent"])
+
+
+def _posjetitelj(**izmjene: Any) -> dict[str, Any]:
+    return {"email": "Ana@Ured.hr", "ime": "Ana", "tvrtka": "Ured d.o.o.", "privola": True,
+            **izmjene}
+
+
+def test_lead_se_upisuje_prije_demonstracije(
+    klijent: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    leadovi: list[dict[str, Any]] = []
+    monkeypatch.setattr(crm, "upisi_lead", lambda _a, **kw: leadovi.append(kw) or "osoba-1")
+    monkeypatch.setattr(posta, "posalji", lambda _p, _poruka: pytest.fail("lead ne šalje mail"))
+    odgovor = klijent.post("/api/lead", json=_posjetitelj())
+    assert odgovor.json() == {"ok": True, "attio": True}
+    assert leadovi[0]["email"] == "ana@ured.hr"
+    assert "Accept" in leadovi[0]["biljeska"]
+    assert [z["dogadaj"] for z in dnevnik.procitaj_sve(tmp_path)] == ["lead", "attio_upisan"]
+
+
+def test_lead_pad_attia_ne_zaustavlja_demo(
+    klijent: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    def pada(_a: object, **_kw: object) -> str:
+        raise crm.GreskaAttio("503")
+
+    monkeypatch.setattr(crm, "upisi_lead", pada)
+    assert klijent.post("/api/lead", json=_posjetitelj()).json() == {"ok": True, "attio": False}
+    assert dnevnik.procitaj_sve(tmp_path)[0]["email"] == "ana@ured.hr"
+
+
+@pytest.mark.parametrize("izmjena", [{"privola": False}, {"email": "x"}, {"racuni": []}])
+def test_lead_neispravan_se_odbija(klijent: TestClient, izmjena: dict[str, Any]) -> None:
+    assert klijent.post("/api/lead", json=_posjetitelj(**izmjena)).status_code in (400, 422)

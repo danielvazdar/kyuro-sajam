@@ -14,3 +14,7 @@
 - Sada: ista lozinka kao demo (apr1 hash kopiran u .env), HttpOnly/Secure/SameSite=Strict kolačić 60 dana, 10 krivih pokušaja / 15 min.
 - Ljuska je javna i otvara se iz service workera (spremnik prvi); API bez prijave vraća 401.
 - 2026-10-14: čitač effort medium → low (6–7 s umjesto 9–11 s po listu, ista točnost na probnom listu).
+
+## 2026-10-14 — podaci posjetitelja PRVI, ne zadnji
+- Daniel: lead prije demonstracije. `/api/lead` upisuje dnevnik + Attio odmah; slanje na kraju je jedan dodir.
+- „Novi posjetitelj, isti računi”: novi lead, bez ponovnog čitanja istog lista.

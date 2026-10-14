@@ -48,6 +48,11 @@ await stranica.route('**/api/procitaj', async (ruta) => {
     ? { sesija: 'a'.repeat(32), racuni: [ina, konzum] }
     : { sesija: 'b'.repeat(32), racuni: [tisak, ina] } })
 })
+const leadovi = []
+await stranica.route('**/api/lead', async (ruta) => {
+  leadovi.push(ruta.request().postDataJSON())
+  await ruta.fulfill({ json: { ok: true, attio: true } })
+})
 let poslano = null
 await stranica.route('**/api/posalji', async (ruta) => {
   poslano = ruta.request().postDataJSON()
@@ -65,7 +70,7 @@ tvrdi(await stranica.textContent('#prijava-greska') === 'Kriva lozinka.', 'kriva
 await stranica.screenshot({ path: 'snimke/0-prijava.png' })
 await stranica.fill('input[name=lozinka]', LOZINKA)
 await stranica.click('#prijava-gumb')
-await stranica.waitForSelector('#korak-foto:not([hidden])')
+await stranica.waitForSelector('#korak-posjetitelj:not([hidden])')
 await stranica.waitForTimeout(400)
 await stranica.screenshot({ path: 'snimke/1-pocetak.png' })
 
@@ -73,6 +78,22 @@ await stranica.screenshot({ path: 'snimke/1-pocetak.png' })
 await stranica.reload()
 await stranica.waitForTimeout(800)
 tvrdi(await stranica.isHidden('#korak-prijava'), 'prijava zapamćena nakon ponovnog otvaranja')
+
+// PRVI korak je posjetitelj: bez adrese i privole demo ne kreće
+await stranica.click('#zapocni')
+tvrdi(await stranica.isVisible('#obrazac-greska'), 'prazna adresa je odbijena')
+await stranica.fill('input[name=email]', 'ana@ured.hr')
+await stranica.fill('input[name=ime]', 'Ana Horvat')
+await stranica.fill('input[name=tvrtka]', 'Ured Horvat d.o.o.')
+await stranica.click('#zapocni')
+tvrdi(await stranica.textContent('#obrazac-greska') === 'Za nastavak je potrebna privola.', 'bez privole nema demonstracije')
+await stranica.check('input[name=privola]')
+await stranica.click('#zapocni')
+await stranica.waitForSelector('#korak-foto:not([hidden])')
+tvrdi(leadovi.length === 1 && leadovi[0].email === 'ana@ured.hr', 'lead upisan PRIJE demonstracije')
+tvrdi((await stranica.textContent('#za-koga')).includes('Ana Horvat'), 'vidi se za koga je demo')
+await stranica.waitForTimeout(400)
+await stranica.screenshot({ path: 'snimke/1b-foto.png' })
 
 // 1×1 JPEG je dovoljan: čitač je podmetnut
 const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64')
@@ -110,14 +131,7 @@ tvrdi(retci.length === 3 && retci.every((r) => r.length === 211), 'eURA: 3 retka
 await stranica.waitForTimeout(400) // pričekaj animaciju ulaska
 await stranica.screenshot({ path: 'snimke/5-datoteka.png', fullPage: true })
 
-await stranica.click('#posalji')
-tvrdi(await stranica.isVisible('#obrazac-greska'), 'prazna adresa je odbijena')
-await stranica.fill('input[name=email]', 'ana@ured.hr')
-await stranica.fill('input[name=ime]', 'Ana Horvat')
-await stranica.fill('input[name=tvrtka]', 'Ured Horvat d.o.o.')
-await stranica.click('#posalji')
-tvrdi(await stranica.textContent('#obrazac-greska') === 'Za slanje je potrebna privola.', 'bez privole nema slanja')
-await stranica.check('input[name=privola]')
+tvrdi(await stranica.textContent('#posalji') === 'Pošalji na ana@ured.hr', 'jedan dodir do slanja')
 await stranica.click('#posalji')
 await stranica.waitForSelector('#korak-poslano:not([hidden])')
 tvrdi(poslano?.email === 'ana@ured.hr' && poslano.racuni.length === 3, 'poslan pravi sadržaj')
@@ -125,8 +139,17 @@ tvrdi(JSON.stringify(poslano.sesije) === JSON.stringify(['a'.repeat(32), 'b'.rep
 tvrdi(poslano.racuni.every((r) => !('upozorenja' in r)), 'upozorenja se ne šalju natrag')
 await stranica.screenshot({ path: 'snimke/6-poslano.png' })
 
-await stranica.click('#isti-list')
+// Novi posjetitelj, isti računi: podaci prvo, pa ravno na popis bez ponovnog čitanja
+await stranica.click('#isti-racuni')
+await stranica.waitForSelector('#korak-posjetitelj:not([hidden])')
 tvrdi(await stranica.inputValue('input[name=email]') === '', 'obrazac očišćen za novog posjetitelja')
+await stranica.fill('input[name=email]', 'ivo@ured2.hr')
+await stranica.check('input[name=privola]')
+await stranica.click('#zapocni')
+await stranica.waitForSelector('#korak-racuni:not([hidden])')
+tvrdi(await stranica.locator('.racun').count() === 3, 'isti računi zadržani')
+tvrdi(citanja === 2, 'bez ponovnog čitanja')
+tvrdi(leadovi.length === 2, 'drugi posjetitelj je lead')
 
 await preglednik.close()
 tvrdi(greske.length === 0, `greške u konzoli: ${greske.join(' | ')}`)

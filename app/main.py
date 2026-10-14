@@ -187,8 +187,10 @@ def eura(popis: Popis) -> str:
     return datoteka_eura(popis.racuni)
 
 
-class Slanje(Popis):
-    sesije: list[str] = Field(default_factory=list, max_length=MAKS_FOTOGRAFIJA)
+class Posjetitelj(BaseModel):
+    """Tko je posjetitelj. Upisuje se PRVI, prije demonstracije (Daniel, 14.10.)."""
+
+    model_config = ConfigDict(extra="forbid")
     email: str = Field(max_length=254)
     ime: str = Field(default="", max_length=80)
     tvrtka: str = Field(default="", max_length=120)
@@ -202,6 +204,11 @@ class Slanje(Popis):
             raise ValueError("neispravna adresa")
         return vrijednost
 
+
+class Slanje(Posjetitelj):
+    racuni: list[Racun] = Field(min_length=1, max_length=MAKS_RACUNA)
+    sesije: list[str] = Field(default_factory=list, max_length=MAKS_FOTOGRAFIJA)
+
     @field_validator("sesije")
     @classmethod
     def _sesije(cls, vrijednosti: list[str]) -> list[str]:
@@ -210,14 +217,34 @@ class Slanje(Popis):
         return list(dict.fromkeys(vrijednosti))  # bez duplikata, redoslijed ostaje
 
 
-def _biljeska(slanje: Slanje) -> str:
+def _biljeska_lead(posjetitelj: Posjetitelj) -> str:
+    return "\n".join([
+        "Upoznali smo se na sajmu Accept; ostavio/la je podatke prije F1 demonstracije.",
+        f"Tvrtka: {posjetitelj.tvrtka or '—'}",
+    ])
+
+
+def _biljeska_slanje(slanje: Slanje) -> str:
     retci = [f"{r.dobavljac} · {r.broj_racuna} · {r.ukupno:.2f} EUR" for r in slanje.racuni]
     return "\n".join([
-        "F1 demo na sajmu: skenirali smo njihov list s računima i poslali eURA.txt na mail.",
-        f"Tvrtka: {slanje.tvrtka or '—'}",
+        "F1 demo: skenirali smo njihove račune i poslali eURA.txt na mail.",
         f"Računa: {len(slanje.racuni)}",
         *retci,
     ])
+
+
+@app.post("/api/lead", dependencies=Zasticeno)
+def lead(posjetitelj: Posjetitelj, p: Annotated[Postavke, Depends(postavke)]) -> dict[str, Any]:
+    """Prvi korak: posjetitelj ostavi podatke i odmah postaje lead, prije ikakve demonstracije."""
+    if not posjetitelj.privola:
+        raise HTTPException(400, "Bez privole ne možemo nastaviti.")
+    test = posjetitelj.email in p.test_adrese
+    dnevnik.upisi(p.data_dir, {
+        "dogadaj": "lead", "email": posjetitelj.email, "ime": posjetitelj.ime,
+        "tvrtka": posjetitelj.tvrtka, "test": test,
+    })
+    attio_ok = test or _u_attio(posjetitelj, p, _biljeska_lead(posjetitelj))
+    return {"ok": True, "attio": attio_ok}
 
 
 @app.post("/api/posalji", dependencies=Zasticeno)
@@ -225,10 +252,9 @@ def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[s
     if not slanje.privola:
         raise HTTPException(400, "Bez privole ne šaljemo.")
     test = slanje.email in p.test_adrese
-    # Lead se upisuje PRVI: ako mail ili Attio padnu, posjetitelj nije izgubljen.
     dnevnik.upisi(p.data_dir, {
-        "dogadaj": "lead", "email": slanje.email, "ime": slanje.ime, "tvrtka": slanje.tvrtka,
-        "racuna": len(slanje.racuni), "sesije": slanje.sesije, "test": test,
+        "dogadaj": "slanje", "email": slanje.email, "racuna": len(slanje.racuni),
+        "sesije": slanje.sesije, "test": test,
     })
 
     putanje = (_mapa_sesije(p, sesija) / "fotografija.jpg" for sesija in slanje.sesije)
@@ -244,22 +270,25 @@ def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[s
     dnevnik.upisi(p.data_dir, {"dogadaj": "mail_poslan", "email": slanje.email,
                                "brevo_id": poruka_id})
 
-    attio_ok = test or _u_attio(slanje, p)
+    attio_ok = test or _u_attio(slanje, p, _biljeska_slanje(slanje))
     return {"poslano": True, "attio": attio_ok}
 
 
-def _u_attio(slanje: Slanje, p: Postavke) -> bool:
-    """Attio ne smije srušiti demo: posjetitelj je mail već dobio, lead je u dnevniku."""
+def _u_attio(posjetitelj: Posjetitelj, p: Postavke, biljeska: str) -> bool:
+    """Attio ne smije srušiti demo: lead je već u dnevniku i može se dopuniti kasnije.
+
+    Upis je idempotentan po mailu: druga bilješka ide na istu osobu i isti posao.
+    """
     try:
         osoba_id = crm.upisi_lead(
-            crm.Attio(p.attio_api_key), email=slanje.email, ime=slanje.ime,
-            tvrtka=slanje.tvrtka, kampanja=p.kampanja, biljeska=_biljeska(slanje),
+            crm.Attio(p.attio_api_key), email=posjetitelj.email, ime=posjetitelj.ime,
+            tvrtka=posjetitelj.tvrtka, kampanja=p.kampanja, biljeska=biljeska,
         )
     except crm.GreskaAttio as greska:
         logger.error("attio: %s", greska)
-        dnevnik.upisi(p.data_dir, {"dogadaj": "attio_pao", "email": slanje.email})
+        dnevnik.upisi(p.data_dir, {"dogadaj": "attio_pao", "email": posjetitelj.email})
         return False
-    dnevnik.upisi(p.data_dir, {"dogadaj": "attio_upisan", "email": slanje.email,
+    dnevnik.upisi(p.data_dir, {"dogadaj": "attio_upisan", "email": posjetitelj.email,
                                "osoba": osoba_id})
     return True
 

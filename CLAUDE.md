@@ -1,6 +1,7 @@
 # kyuro-sajam — F1 demo za sajam (Accept, Zagreb, 16.10.2026.)
 
-Što je: instalabilna mobilna aplikacija (PWA). Daniel fotografira list s računima i slipovima,
+Što je: instalabilna mobilna aplikacija (PWA). Tok: **posjetitelj prvo ostavi podatke** (odmah lead u
+Attiu, `/api/lead`), pa Daniel fotografira list s računima i slipovima,
 Claude ih očita, aplikacija provjeri OIB i zbrojeve, složi **eURA.txt** za Synesis i pošalje
 posjetitelju mail (eURA.txt + CSV + fotografija). Posjetitelj ulazi u Attio kao lead.
 Živi na **https://demo.kyuro.tech/sajam/** (KVM1). Prijava u aplikaciji, ista lozinka kao demo
