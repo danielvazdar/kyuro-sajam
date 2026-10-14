@@ -16,6 +16,7 @@
   <header class="zaglavlje">
     <span class="znak">Kyuro</span>
     <span class="naslov">F1 · ulazni računi</span>
+    <button type="button" class="tekst-gumb pomoc" id="pomoc" aria-label="Kako radi" hidden>?</button>
     <button type="button" class="tekst-gumb" id="ispocetka" hidden>Ispočetka</button>
   </header>
 
@@ -23,9 +24,9 @@
     <!-- 0. Prijava (jednom u 60 dana) -->
     <section id="korak-prijava" class="korak" hidden>
       <h1>Prijava</h1>
-      <p class="tiho">Ista lozinka kao za demo. Aplikacija Vas pamti 60 dana.</p>
+      <p class="tiho">Upišite pristupni kod koji ste dobili e-poštom.</p>
       <form id="prijava-obrazac" novalidate>
-        <label>Lozinka
+        <label>Pristupni kod
           <input type="password" name="lozinka" autocomplete="current-password" required>
         </label>
         <p class="greska" id="prijava-greska" role="alert" hidden></p>
@@ -58,9 +59,38 @@
       </form>
     </section>
 
+    <!-- 1b. Dobrodošlica: tri ekrana nakon podataka posjetitelja (Daniel, 14.10.) -->
+    <section id="korak-dobrodoslica" class="korak dobrodoslica" hidden>
+      <ol class="slajdovi" id="slajdovi">
+        <li class="slajd">
+          <span class="slajd-broj" aria-hidden="true">1</span>
+          <h1>Fotografirajte račune</h1>
+          <p>Fotografirajte list sa slipovima i računima ili odaberite više fotografija iz galerije.</p>
+        </li>
+        <li class="slajd" hidden>
+          <span class="slajd-broj" aria-hidden="true">2</span>
+          <h1>Provjerite podatke</h1>
+          <p>Aplikacija čita dobavljača, OIB, iznose i PDV te provjerava zbrojeve. Žuto su označena
+            polja koja treba provjeriti.</p>
+        </li>
+        <li class="slajd" hidden>
+          <span class="slajd-broj" aria-hidden="true">3</span>
+          <h1>Učitajte u Synesis</h1>
+          <p>Složite eURA.txt i spremite ga u korijen diska. U Synesisu odaberite:
+            e-URA → Učitaj iz datoteke.</p>
+        </li>
+      </ol>
+      <div class="tockice" id="tockice" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="red-gumba">
+        <button type="button" class="gumb sporedni" id="preskoci">Preskoči</button>
+        <button type="button" class="gumb glavni" id="dalje">Dalje</button>
+      </div>
+    </section>
+
     <!-- 2. Fotografija -->
     <section id="korak-foto" class="korak" hidden>
       <p class="za-koga" id="za-koga"></p>
+      <p class="proba-info" id="proba-info" hidden></p>
       <h1>Fotografirajte list s računima</h1>
       <p class="tiho">Jedna fotografija, svi računi i slipovi odjednom.</p>
       <label class="gumb glavni velik">

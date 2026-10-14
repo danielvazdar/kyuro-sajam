@@ -7,13 +7,17 @@ import csv
 import io
 import logging
 from collections.abc import Sequence
+from datetime import date
 
 import requests
 
 from app.config import Postavke
 from app.model import Racun, upozorenja
 from app.tekstovi import (
+    DOBRODOSLICA_NASLOV,
     MAIL_NASLOV,
+    MAIL_NASLOV_SAMOSTALNO,
+    mail_dobrodoslica,
     mail_html,
 )
 
@@ -62,6 +66,7 @@ def sastavi(
     racuni: Sequence[Racun],
     eura: str,
     fotografije: Sequence[bytes],
+    samostalno: bool = False,
 ) -> dict[str, object]:
     privitci = [
         _privitak("eURA.txt", eura.encode("ascii")),
@@ -78,12 +83,30 @@ def sastavi(
         "sender": {"email": postavke.posiljatelj_email, "name": postavke.posiljatelj_ime},
         "to": [{"email": primatelj, **({"name": ime} if ime else {})}],
         "replyTo": {"email": postavke.odgovor_na, "name": "Daniel Vazdar, Kyuro"},
-        "subject": MAIL_NASLOV,
+        "subject": MAIL_NASLOV_SAMOSTALNO if samostalno else MAIL_NASLOV,
         "htmlContent": mail_html(
             ime=ime, racuni=racuni, email=primatelj, fotografija=len(fotografije),
+            samostalno=samostalno,
         ),
         "attachment": privitci,
         "tags": ["sajam"],
+    }
+
+
+def sastavi_dobrodoslicu(
+    postavke: Postavke, *, primatelj: str, ime: str, poveznica: str, kod: str,
+    istek_probe: date,
+) -> dict[str, object]:
+    """Mail na početku probnog roka: poveznica, prijava, tri koraka, što nakon probe."""
+    return {
+        "sender": {"email": postavke.posiljatelj_email, "name": postavke.posiljatelj_ime},
+        "to": [{"email": primatelj, **({"name": ime} if ime else {})}],
+        "replyTo": {"email": postavke.odgovor_na, "name": "Daniel Vazdar, Kyuro"},
+        "subject": DOBRODOSLICA_NASLOV,
+        "htmlContent": mail_dobrodoslica(
+            ime=ime, poveznica=poveznica, kod=kod, istek_probe=istek_probe,
+        ),
+        "tags": ["dobrodoslica"],
     }
 
 

@@ -25,10 +25,11 @@ const POLJA = [
 const IZNOSI = new Set(POLJA.filter((p) => p.vrsta === 'iznos').map((p) => p.ime))
 
 const $ = (id) => document.getElementById(id)
-const KORACI = ['korak-prijava', 'korak-posjetitelj', 'korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
+const KORACI = ['korak-prijava', 'korak-posjetitelj', 'korak-dobrodoslica', 'korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
 
 let stanje = {
   korak: 'korak-posjetitelj', prije: null, posjetitelj: null, zadrziRacune: false,
+  uloga: null, proba: null, slajd: 0, nakonDobrodoslice: 'korak-foto',
   sesije: [], racuni: [], uklonjen: null, otvoren: null,
 }
 
@@ -215,6 +216,10 @@ async function ucitajFotografiju(dogadaj) {
       korak: 'korak-racuni', sesije: uspjesni.map((i) => i.sesija), racuni,
       uklonjen: null, otvoren: null,
     })
+    if (stanje.uloga === 'proba') {
+      // osvježi brojač preostalih čitanja probe
+      api('api/ja').then((o) => o.json()).then((ja) => postavi({ proba: ja })).catch(() => {})
+    }
     const napomene = [
       neuspjesni.length ? `${neuspjesni.length} od ${datoteke.length} fotografija nije pročitano.` : '',
       previse ? `Uzeto je prvih ${MAKS_FOTOGRAFIJA} fotografija.` : '',
@@ -391,7 +396,8 @@ async function zapocni(dogadaj) {
   }
   obrazac.reset()
   const nastavi = stanje.zadrziRacune && stanje.racuni.length > 0
-  postavi({ posjetitelj, zadrziRacune: false, korak: nastavi ? 'korak-racuni' : 'korak-foto' })
+  // Svaki posjetitelj prvo prođe tri ekrana dobrodošlice (Daniel ga vodi kroz njih), mail mu je već stigao.
+  prikaziDobrodoslicu(nastavi ? 'korak-racuni' : 'korak-foto', { posjetitelj, zadrziRacune: false })
 }
 
 // ── 3. slanje ───────────────────────────────────────────────────────────────
@@ -471,6 +477,9 @@ async function posalji() {
 
 function noviPosjetitelj(zadrziRacune) {
   poruka('')
+  if (stanje.uloga === 'proba') {
+    return postavi({ korak: 'korak-foto', sesije: [], racuni: [], uklonjen: null, otvoren: null })
+  }
   if (zadrziRacune) return postavi({ korak: 'korak-posjetitelj', posjetitelj: null, zadrziRacune: true })
   postavi({
     korak: 'korak-posjetitelj', posjetitelj: null, zadrziRacune: false,
@@ -498,7 +507,9 @@ async function prijaviSe(dogadaj) {
     $('prijava-obrazac').reset()
     greskaEl.hidden = true
     poruka('')
-    postavi({ korak: stanje.prije || 'korak-posjetitelj', prije: null })
+    const prije = stanje.prije
+    postavi({ prije: null })
+    await ucitajKorisnika(prije)
   } catch (greska) {
     greskaEl.textContent = greska instanceof TypeError ? 'Nema interneta.' : greska.message
     greskaEl.hidden = false
@@ -507,24 +518,86 @@ async function prijaviSe(dogadaj) {
   }
 }
 
+// ── tko je prijavljen: Daniel (demo posjetiteljima) ili posjetitelj na probi ─────
+const KLJUC_VIDJENO = 'sajam-dobrodoslica-vidjena'
+
+async function ucitajKorisnika(prije = null) {
+  const ja = await (await api('api/ja')).json()
+  if (ja.uloga === 'daniel') {
+    const sljedeci = prije || (stanje.korak === 'korak-prijava' ? 'korak-posjetitelj' : stanje.korak)
+    return postavi({ uloga: 'daniel', proba: null, korak: sljedeci })
+  }
+  const posjetitelj = { email: ja.email, ime: ja.ime, tvrtka: '', privola: true }
+  const osnova = { uloga: 'proba', proba: ja, posjetitelj }
+  let vidjeno = false
+  try { vidjeno = localStorage.getItem(KLJUC_VIDJENO) === ja.email } catch { /* privatni način */ }
+  if (vidjeno) return postavi({ ...osnova, korak: prije && prije !== 'korak-posjetitelj' ? prije : 'korak-foto' })
+  try { localStorage.setItem(KLJUC_VIDJENO, ja.email) } catch { /* privatni način */ }
+  prikaziDobrodoslicu('korak-foto', osnova)
+}
+
 async function provjeriPrijavu() {
+  // Poveznica iz maila dobrodošlice nosi ?kod= — prijavi posjetitelja bez tipkanja.
+  const adresa = new URL(window.location.href)
+  const kod = adresa.searchParams.get('kod')
+  if (kod) {
+    adresa.searchParams.delete('kod')
+    history.replaceState(null, '', adresa.pathname)
+    try {
+      await api('api/prijava', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lozinka: kod }),
+      })
+    } catch { /* kriv ili istekao kod: ispod će /api/ja pokazati prijavu */ }
+  }
   try {
-    await api('api/ja')
+    await ucitajKorisnika()
   } catch {
     // 401 je već prebacio na prijavu; bez mreže aplikacija ostaje otvorena (ljuska radi offline)
   }
 }
 
+// ── dobrodošlica: tri ekrana ────────────────────────────────────────────────
+function prikaziDobrodoslicu(nakon, izmjene = {}) {
+  postavi({ ...izmjene, korak: 'korak-dobrodoslica', slajd: 0, nakonDobrodoslice: nakon })
+}
+
+function iscrtajDobrodoslicu() {
+  const slajdovi = [...$('slajdovi').children]
+  slajdovi.forEach((s, i) => { s.hidden = i !== stanje.slajd })
+  ;[...$('tockice').children].forEach((t, i) => t.classList.toggle('aktivna', i === stanje.slajd))
+  const zadnji = stanje.slajd === slajdovi.length - 1
+  $('dalje').textContent = zadnji ? 'Krenimo' : 'Dalje'
+  $('preskoci').hidden = zadnji
+}
+
+function dalje() {
+  if (stanje.slajd < $('slajdovi').children.length - 1) return postavi({ slajd: stanje.slajd + 1 })
+  postavi({ korak: stanje.nakonDobrodoslice })
+}
+
 // ── iscrtavanje ─────────────────────────────────────────────────────────────
 function iscrtaj() {
   for (const id of KORACI) $(id).hidden = id !== stanje.korak
-  $('ispocetka').hidden = ['korak-prijava', 'korak-posjetitelj', 'korak-citanje'].includes(stanje.korak)
+  const naProbi = stanje.uloga === 'proba'
+  $('ispocetka').hidden = ['korak-prijava', 'korak-posjetitelj', 'korak-dobrodoslica', 'korak-citanje']
+    .includes(stanje.korak)
+  $('pomoc').hidden = !stanje.uloga || ['korak-prijava', 'korak-dobrodoslica', 'korak-citanje'].includes(stanje.korak)
+  $('isti-racuni').hidden = naProbi
+  $('novi-posjetitelj').textContent = naProbi ? 'Novi list' : 'Novi posjetitelj'
+  if (stanje.korak === 'korak-dobrodoslica') iscrtajDobrodoslicu()
   if (stanje.posjetitelj) {
     const { email, ime } = stanje.posjetitelj
     $('za-koga').replaceChildren('Za: ', Object.assign(document.createElement('b'), { textContent: ime || email }),
       ime ? ` · ${email}` : '')
     $('posalji').textContent = `Pošalji na ${email}`
   }
+  if (naProbi && stanje.proba) {
+    const istek = new Date(stanje.proba.istek).toLocaleDateString('hr-HR')
+    $('proba-info').textContent = `Probni pristup do ${istek} · preostalo čitanja: ${stanje.proba.preostalo_citanja}`
+  }
+  $('proba-info').hidden = !naProbi
   if (stanje.korak === 'korak-racuni') {
     iscrtajSazetak()
     $('racuni').replaceChildren(...stanje.racuni.map(iscrtajRacun))
@@ -545,6 +618,9 @@ $('novi-posjetitelj').addEventListener('click', () => noviPosjetitelj(false))
 $('isti-racuni').addEventListener('click', () => noviPosjetitelj(true))
 $('ispocetka').addEventListener('click', () => noviPosjetitelj(false))
 $('prijava-obrazac').addEventListener('submit', prijaviSe)
+$('dalje').addEventListener('click', dalje)
+$('preskoci').addEventListener('click', () => postavi({ korak: stanje.nakonDobrodoslice }))
+$('pomoc').addEventListener('click', () => prikaziDobrodoslicu(stanje.korak))
 window.addEventListener('online', isprazniIzlaz)
 
 if ('serviceWorker' in navigator) {

@@ -14,9 +14,11 @@ import threading
 import time
 import uuid
 from collections import deque
+from dataclasses import dataclass
+from datetime import UTC
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import anthropic
 from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
@@ -25,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app import crm, dnevnik, posta, prijava
+from app import crm, dnevnik, posta, prijava, pristup
 from app.citac import GreskaCitanja, procitaj
 from app.config import Postavke
 from app.model import Racun, upozorenja
@@ -99,17 +101,45 @@ def u_json(racun: Racun) -> dict[str, Any]:
 
 
 _brana_prijave = prijava.Brana()
+ADRESA_APLIKACIJE = "https://demo.kyuro.tech/sajam/"
 
 
-def prijavljen(
+@lru_cache(maxsize=4)
+def _spremiste(data_dir: Path) -> pristup.Spremiste:
+    return pristup.Spremiste(data_dir)
+
+
+@dataclass(frozen=True)
+class Korisnik:
+    """Daniel (lozinka) ili posjetitelj na probi (osobni kod iz maila dobrodošlice)."""
+
+    uloga: Literal["daniel", "proba"]
+    proba: pristup.Pristup | None = None
+
+
+def korisnik(
     p: Annotated[Postavke, Depends(postavke)],
     token: Annotated[str | None, Cookie(alias=prijava.KOLACIC)] = None,
-) -> None:
-    if not prijava.vrijedi(token, p.tajna):
+) -> Korisnik:
+    subjekt = prijava.procitaj(token, p.tajna)
+    if subjekt is None:
         raise HTTPException(401, "Prijavite se.")
+    if subjekt == prijava.DANIEL:
+        return Korisnik("daniel")
+    kod = prijava.kod_iz_subjekta(subjekt)
+    zapis = _spremiste(p.data_dir).po_kodu(kod) if kod else None
+    if zapis is None or not zapis.vrijedi():
+        raise HTTPException(401, "Probni rok je istekao.")
+    return Korisnik("proba", zapis)
 
 
-Zasticeno = [Depends(prijavljen)]
+def samo_daniel(k: Annotated[Korisnik, Depends(korisnik)]) -> Korisnik:
+    if k.uloga != "daniel":
+        raise HTTPException(403, "Ova radnja nije dostupna na probi.")
+    return k
+
+
+Zasticeno = [Depends(korisnik)]
 
 
 @app.get("/api/zdravlje")
@@ -122,32 +152,50 @@ class Prijava(BaseModel):
     lozinka: str = Field(max_length=200)
 
 
+def _postavi_kolacic(odgovor: Response, vrijednost: str, trajanje_s: int) -> None:
+    odgovor.set_cookie(prijava.KOLACIC, vrijednost, max_age=trajanje_s, path="/",
+                       secure=True, httponly=True, samesite="strict")
+
+
 @app.post("/api/prijava")
 def prijavi(
     podaci: Prijava, odgovor: Response, p: Annotated[Postavke, Depends(postavke)],
 ) -> dict[str, bool]:
+    """Danielova lozinka ILI pristupni kod posjetitelja — isto polje, ista brana."""
     if _brana_prijave.zatvorena():
         raise HTTPException(429, "Previše pokušaja. Pričekajte 15 minuta.")
-    if not prijava.lozinka_ispravna(podaci.lozinka, p.lozinka_hash):
-        _brana_prijave.promasaj()
-        logger.warning("prijava: kriva lozinka")
-        raise HTTPException(401, "Kriva lozinka.")
-    odgovor.set_cookie(
-        prijava.KOLACIC, prijava.izdaj(p.tajna), max_age=prijava.TRAJANJE_S,
-        path="/", secure=True, httponly=True, samesite="strict",
-    )
-    return {"ok": True}
+    if pristup.je_kod(podaci.lozinka):
+        zapis = _spremiste(p.data_dir).po_kodu(podaci.lozinka)
+        if zapis is not None and zapis.vrijedi():
+            istek = int(zapis.istek_dt.timestamp())
+            preostalo = max(1, istek - int(time.time()))
+            token = prijava.izdaj(p.tajna, subjekt=prijava.subjekt_probe(zapis.kod), istek=istek)
+            _postavi_kolacic(odgovor, token, preostalo)
+            return {"ok": True}
+    elif prijava.lozinka_ispravna(podaci.lozinka, p.lozinka_hash):
+        _postavi_kolacic(odgovor, prijava.izdaj(p.tajna), prijava.TRAJANJE_S)
+        return {"ok": True}
+    _brana_prijave.promasaj()
+    logger.warning("prijava: kriva lozinka ili kod")
+    raise HTTPException(401, "Kriva lozinka ili kod (ili je probni rok istekao).")
 
 
-@app.get("/api/ja", dependencies=Zasticeno)
-def ja() -> dict[str, bool]:
-    return {"prijavljen": True}
+@app.get("/api/ja")
+def ja(k: Annotated[Korisnik, Depends(korisnik)]) -> dict[str, Any]:
+    if k.proba is None:
+        return {"uloga": "daniel"}
+    return {
+        "uloga": "proba", "email": k.proba.email, "ime": k.proba.ime,
+        "istek": k.proba.istek_dt.astimezone(UTC).date().isoformat(),
+        "preostalo_citanja": pristup.MAKS_CITANJA - k.proba.citanja,
+    }
 
 
-@app.post("/api/procitaj", dependencies=Zasticeno)
+@app.post("/api/procitaj")
 def procitaj_fotografiju(
     fotografija: Annotated[UploadFile, File()],
     p: Annotated[Postavke, Depends(postavke)],
+    k: Annotated[Korisnik, Depends(korisnik)],
 ) -> dict[str, Any]:
     sirovo = fotografija.file.read(MAKS_FOTOGRAFIJA_B + 1)
     if len(sirovo) > MAKS_FOTOGRAFIJA_B:
@@ -155,6 +203,10 @@ def procitaj_fotografiju(
     if not _granica_citanja.propusti():
         raise HTTPException(429, "Dosegnuta je satna granica čitanja.")
     jpeg = pripremi_fotografiju(sirovo)
+    if k.proba is not None and not _spremiste(p.data_dir).zabiljezi_citanje(k.proba.kod):
+        raise HTTPException(
+            429, f"Iskorišteno je svih {pristup.MAKS_CITANJA} čitanja probnog roka.",
+        )
 
     sesija = uuid.uuid4().hex
     mapa = _mapa_sesije(p, sesija)
@@ -233,7 +285,7 @@ def _biljeska_slanje(slanje: Slanje) -> str:
     ])
 
 
-@app.post("/api/lead", dependencies=Zasticeno)
+@app.post("/api/lead", dependencies=[Depends(samo_daniel)])
 def lead(posjetitelj: Posjetitelj, p: Annotated[Postavke, Depends(postavke)]) -> dict[str, Any]:
     """Prvi korak: posjetitelj ostavi podatke i odmah postaje lead, prije ikakve demonstracije."""
     if not posjetitelj.privola:
@@ -244,11 +296,34 @@ def lead(posjetitelj: Posjetitelj, p: Annotated[Postavke, Depends(postavke)]) ->
         "tvrtka": posjetitelj.tvrtka, "test": test,
     })
     attio_ok = test or _u_attio(posjetitelj, p, _biljeska_lead(posjetitelj))
-    return {"ok": True, "attio": attio_ok}
+    return {"ok": True, "attio": attio_ok, "dobrodoslica": _dobrodoslica(posjetitelj, p)}
 
 
-@app.post("/api/posalji", dependencies=Zasticeno)
-def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[str, Any]:
+def _dobrodoslica(posjetitelj: Posjetitelj, p: Postavke) -> bool:
+    """Osobni probni kod + mail dobrodošlice. Pad maila ne zaustavlja demo pred posjetiteljem."""
+    zapis = _spremiste(p.data_dir).izdaj(email=posjetitelj.email, ime=posjetitelj.ime)
+    poruka = posta.sastavi_dobrodoslicu(
+        p, primatelj=posjetitelj.email, ime=posjetitelj.ime, poveznica=ADRESA_APLIKACIJE,
+        kod=zapis.za_prikaz, istek_probe=zapis.istek_dt.date(),
+    )
+    try:
+        poruka_id = posta.posalji(p, poruka)
+    except posta.GreskaSlanja:
+        dnevnik.upisi(p.data_dir, {"dogadaj": "dobrodoslica_pala", "email": posjetitelj.email})
+        return False
+    dnevnik.upisi(p.data_dir, {"dogadaj": "dobrodoslica", "email": posjetitelj.email,
+                               "istek_probe": zapis.istek, "brevo_id": poruka_id})
+    return True
+
+
+@app.post("/api/posalji")
+def posalji(
+    slanje: Slanje, p: Annotated[Postavke, Depends(postavke)],
+    k: Annotated[Korisnik, Depends(korisnik)],
+) -> dict[str, Any]:
+    if k.proba is not None:
+        # Na probi mail ide UVIJEK na adresu iz probe — tijelo zahtjeva ne može ga preusmjeriti.
+        slanje = slanje.model_copy(update={"email": k.proba.email, "ime": k.proba.ime})
     if not slanje.privola:
         raise HTTPException(400, "Bez privole ne šaljemo.")
     test = slanje.email in p.test_adrese
@@ -261,7 +336,8 @@ def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[s
     fotografije = [putanja.read_bytes() for putanja in putanje if putanja.exists()]
 
     poruka = posta.sastavi(p, primatelj=slanje.email, ime=slanje.ime, racuni=slanje.racuni,
-                           eura=datoteka_eura(slanje.racuni), fotografije=fotografije)
+                           eura=datoteka_eura(slanje.racuni), fotografije=fotografije,
+                           samostalno=k.proba is not None)
     try:
         poruka_id = posta.posalji(p, poruka)
     except posta.GreskaSlanja as greska:
@@ -270,7 +346,10 @@ def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[s
     dnevnik.upisi(p.data_dir, {"dogadaj": "mail_poslan", "email": slanje.email,
                                "brevo_id": poruka_id})
 
-    attio_ok = test or _u_attio(slanje, p, _biljeska_slanje(slanje))
+    biljeska = _biljeska_slanje(slanje)
+    if k.proba is not None:
+        biljeska = "SAM koristi probu (dobar znak za nastavak).\n" + biljeska
+    attio_ok = test or _u_attio(slanje, p, biljeska)
     return {"poslano": True, "attio": attio_ok}
 
 

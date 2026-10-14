@@ -62,3 +62,19 @@ def test_poziv_na_termin_a_ne_na_telefon() -> None:
     assert "tel:" not in html
     assert "https://cal.eu/kyuro/fit-call?name=Ana+%3CHorvat%3E&amp;email=ana%40ured.hr" in html
     assert "Poštovani Ana &lt;Horvat&gt;," in html
+
+
+def test_mail_dobrodoslice() -> None:
+    from datetime import date as datum
+
+    from app.tekstovi import mail_dobrodoslica
+
+    html = mail_dobrodoslica(ime="Ana <H>", poveznica="https://demo.kyuro.tech/sajam/",
+                             kod="KQ7M-4RTX", istek_probe=datum(2026, 10, 23))
+    assert "Poštovani Ana &lt;H&gt;," in html
+    assert "23.10.2026." in html
+    assert 'href="https://demo.kyuro.tech/sajam/?kod=KQ7M-4RTX"' in html
+    assert "KQ7M-4RTX</b>" in html
+    assert "29 € mjesečno" in html and "500 dokumenata" in html
+    assert "Fakturk" not in html  # kupcu ne znači ništa
+    assert "kyuro-logo.png" in html

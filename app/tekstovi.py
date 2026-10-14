@@ -7,12 +7,14 @@ Raspored je tablični i sa stilovima u retku, jer Outlook i Gmail ne čitaju <st
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
 from decimal import Decimal
 from urllib.parse import urlencode
 
 from app.model import Racun, upozorenja
 
 MAIL_NASLOV = "Vaši računi sa sajma Accept, spremni za Synesis"
+MAIL_NASLOV_SAMOSTALNO = "Vaši računi iz Kyuro F1, spremni za Synesis"
 
 # Daniel 14.10.: bez poziva i poruka na mobitel — odgovor na mail ili termin u Cal.com.
 _TERMIN = "https://cal.eu/kyuro/fit-call"
@@ -138,43 +140,23 @@ def _koraci() -> str:
             f'<table role="presentation" cellpadding="0" cellspacing="0">{retci}</table>')
 
 
-def _gumb(*, ime: str, email: str) -> str:
-    """Gumb za rezervaciju razgovora; Cal.com unaprijed popuni ime i adresu."""
-    popunjeno = {k: v for k, v in (("name", ime), ("email", email)) if v}
-    poveznica = _esc(f"{_TERMIN}?{urlencode(popunjeno)}" if popunjeno else _TERMIN)
+def _gumb_poveznica(poveznica: str, tekst: str) -> str:
     return f"""<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 24px">
 <tr><td style="border-radius:10px;background:{_GLINA}">
-<a href="{poveznica}" style="display:inline-block;padding:12px 22px;color:#ffffff;
-font-weight:bold;font-size:15px;text-decoration:none">Odaberite termin za razgovor</a>
+<a href="{_esc(poveznica)}" style="display:inline-block;padding:12px 22px;color:#ffffff;
+font-weight:bold;font-size:15px;text-decoration:none">{tekst}</a>
 </td></tr></table>"""
 
 
-def mail_html(
-    *, ime: str, racuni: Sequence[Racun], email: str = "", fotografija: int = 1,
-) -> str:
-    """Sve što stiže od posjetitelja (ime, podaci računa) escapea se ovdje."""
-    pozdrav = f"Poštovani {_esc(ime)}," if ime else "Poštovani,"
-    tijelo = f"""
-<p style="margin:0 0 14px">{pozdrav}</p>
-<p style="margin:0 0 18px">hvala Vam na ugodnom razgovoru danas na sajmu Accept u Zagrebu.
-Kao što sam Vam pokazao na mobitelu, u privitku šaljem eURA.txt datoteku za Synesis,
-složenu iz računa koje smo zajedno fotografirali:</p>
-{_tablica(racuni)}
-{_privitci(fotografija)}
-{_koraci()}
-<p style="margin:16px 0 0;color:{_TINTA_2};font-size:13px">Ovo je pokazni primjer: računi
-označeni s „provjeriti” zahtijevaju Vaš pregled, a datoteku je najbolje prvo učitati u
-testnu kopiju knjige.</p>
-<h2 style="font-size:16px;margin:28px 0 8px;color:{_TINTA}">A u Vašem uredu?</h2>
-<p style="margin:0 0 14px">Tamo to može raditi bez fotografiranja: računi koji stignu
-e-poštom ili kao PDF sami se očitaju, a Vi ih samo pregledate i kliknete na uvoz. Ako Vas
-zanima kako bi to izgledalo kod Vas, odaberite termin za kratak razgovor ili jednostavno
-odgovorite na ovu poruku.</p>
-{_gumb(ime=ime, email=email)}
-<p style="margin:0">Lijep pozdrav,<br><b>Daniel Vazdar</b><br>
-<span style="color:{_TINTA_2}">Kyuro · automatizacija knjigovodstva</span><br>
-<a href="https://kyuro.tech" style="color:{_GLINA}">kyuro.tech</a></p>"""
+def _gumb(*, ime: str, email: str) -> str:
+    """Gumb za rezervaciju razgovora; Cal.com unaprijed popuni ime i adresu."""
+    popunjeno = {k: v for k, v in (("name", ime), ("email", email)) if v}
+    poveznica = f"{_TERMIN}?{urlencode(popunjeno)}" if popunjeno else _TERMIN
+    return _gumb_poveznica(poveznica, "Odaberite termin za razgovor")
 
+
+def _okvir(tijelo: str, podnozje: str) -> str:
+    """Zajednički izgled svih mailova: Kyuro zaglavlje, bijela kartica, sitni tekst ispod."""
     return f"""<!doctype html><html lang="hr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:{_PAPIR};-webkit-text-size-adjust:100%">
@@ -187,6 +169,85 @@ line-height:1.55">
 <tr><td style="padding:24px 24px 28px">{tijelo}</td></tr>
 </table>
 <p style="max-width:560px;margin:16px auto 0;font-family:{_FONT};font-size:12px;
-color:#8b9083;line-height:1.5">Ovu ste poruku primili jer ste mi na sajmu Accept ostavili
-adresu. Ako ne želite da Vam se ponovno javim, samo odgovorite s „odjava”.</p>
+color:#8b9083;line-height:1.5">{podnozje}</p>
 </td></tr></table></body></html>"""
+
+
+_POTPIS = f"""<p style="margin:0">Lijep pozdrav,<br><b>Daniel Vazdar</b><br>
+<span style="color:{_TINTA_2}">Kyuro · automatizacija knjigovodstva</span><br>
+<a href="https://kyuro.tech" style="color:{_GLINA}">kyuro.tech</a></p>"""
+
+
+def mail_html(
+    *, ime: str, racuni: Sequence[Racun], email: str = "", fotografija: int = 1,
+    samostalno: bool = False,
+) -> str:
+    """Sve što stiže od posjetitelja (ime, podaci računa) escapea se ovdje."""
+    pozdrav = f"Poštovani {_esc(ime)}," if ime else "Poštovani,"
+    # Samostalno = posjetitelj na probi sam koristi aplikaciju; „razgovor na sajmu" tu ne stoji.
+    uvod = (
+        '<p style="margin:0 0 18px">u privitku su računi koje ste očitali u Kyuro F1, '
+        "složeni u eURA.txt za Synesis:</p>"
+        if samostalno else
+        """<p style="margin:0 0 18px">hvala Vam na ugodnom razgovoru danas na sajmu Accept
+u Zagrebu. Kao što sam Vam pokazao na mobitelu, u privitku šaljem eURA.txt datoteku za Synesis,
+složenu iz računa koje smo zajedno fotografirali:</p>"""
+    )
+    tijelo = f"""
+<p style="margin:0 0 14px">{pozdrav}</p>
+{uvod}
+{_tablica(racuni)}
+{_privitci(fotografija)}
+{_koraci()}
+<p style="margin:16px 0 0;color:{_TINTA_2};font-size:13px">Ovo je pokazni primjer: računi
+označeni s „provjeriti” zahtijevaju Vaš pregled, a datoteku je najbolje prvo učitati u
+testnu kopiju knjige.</p>
+<h2 style="font-size:16px;margin:28px 0 8px;color:{_TINTA}">A u Vašem uredu?</h2>
+<p style="margin:0 0 14px">Tamo to može raditi bez fotografiranja: računi koji stignu
+e-poštom ili kao PDF sami se očitaju, a Vi ih samo pregledate i kliknete na uvoz. Ako Vas
+zanima kako bi to izgledalo kod Vas, odaberite termin za kratak razgovor ili jednostavno
+odgovorite na ovu poruku.</p>
+{_gumb(ime=ime, email=email)}
+{_POTPIS}"""
+    podnozje = (
+        "Ovu ste poruku primili jer koristite probni pristup Kyuro F1." if samostalno else
+        "Ovu ste poruku primili jer ste mi na sajmu Accept ostavili adresu. "
+        "Ako ne želite da Vam se ponovno javim, samo odgovorite s „odjava”."
+    )
+    return _okvir(tijelo, podnozje)
+
+
+DOBRODOSLICA_NASLOV = "Dobrodošli u Kyuro F1"
+PROBNI_DANI = 7
+CIJENA_MJESECNO = "29 €"
+DOKUMENATA_U_CIJENI = 500
+
+
+def mail_dobrodoslica(*, ime: str, poveznica: str, kod: str, istek_probe: date) -> str:
+    """Mail novom korisniku na početku probnog roka. Tekst dotjeran kroz `peer gpt` 14.10."""
+    pozdrav = f"Poštovani {_esc(ime)}," if ime else "Poštovani,"
+    koraci = "".join(
+        f'<li style="margin:0 0 6px">{korak}</li>'
+        for korak in ("fotografirajte račune", "provjerite označena polja",
+                      "složite eURA.txt i učitajte ga u Synesis")
+    )
+    tijelo = f"""
+<p style="margin:0 0 14px">{pozdrav}</p>
+<p style="margin:0 0 18px">dobrodošli u Kyuro F1. Vaš probni rok traje {PROBNI_DANI} dana,
+do <b>{istek_probe:%d.%m.%Y.}</b></p>
+{_gumb_poveznica(f"{poveznica}?{urlencode({'kod': kod})}", "Otvorite aplikaciju")}
+<p style="margin:0 0 18px">Vaš pristupni kod: <b style="font-size:18px;letter-spacing:2px;
+font-family:monospace">{_esc(kod)}</b></p>
+<p style="margin:0 0 14px"><b>Kako dodati aplikaciju na mobitel:</b> otvorite poveznicu u
+Safariju ili Chromeu i odaberite „Dodaj na početni zaslon”. Pri prvom otvaranju s početnog
+zaslona upišite pristupni kod.</p>
+<p style="margin:0 0 6px"><b>U tri koraka:</b></p>
+<ol style="margin:0 0 18px;padding-left:22px">{koraci}</ol>
+<p style="margin:0 0 14px;color:{_TINTA_2};font-size:14px">Nakon probnog roka korištenje iznosi
+{CIJENA_MJESECNO} mjesečno, do {DOKUMENATA_U_CIJENI} dokumenata. Račun Vam stiže e-poštom, a ako
+ne želite nastaviti, ne morate ništa poduzeti.</p>
+<p style="margin:0 0 18px">Ako nešto zapne, odgovorite na ovu poruku.</p>
+{_POTPIS}"""
+    return _okvir(
+        tijelo, "Ovu ste poruku primili jer ste se prijavili za probno korištenje Kyuro F1.",
+    )

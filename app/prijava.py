@@ -30,25 +30,51 @@ def lozinka_ispravna(lozinka: str, apr1_hash: str) -> bool:
         return False
 
 
-def _potpis(tajna: str, istek: int) -> str:
-    return hmac.new(tajna.encode(), str(istek).encode(), hashlib.sha256).hexdigest()
+DANIEL = "daniel"
+_PROBA = "proba-"
 
 
-def izdaj(tajna: str, sada: float | None = None) -> str:
-    istek = int((sada or time.time()) + TRAJANJE_S)
-    return f"{istek}.{_potpis(tajna, istek)}"
+def _potpis(tajna: str, poruka: str) -> str:
+    return hmac.new(tajna.encode(), poruka.encode(), hashlib.sha256).hexdigest()
+
+
+def subjekt_probe(kod: str) -> str:
+    return f"{_PROBA}{kod}"
+
+
+def kod_iz_subjekta(subjekt: str) -> str | None:
+    return subjekt.removeprefix(_PROBA) if subjekt.startswith(_PROBA) else None
+
+
+def izdaj(
+    tajna: str, sada: float | None = None, *, subjekt: str = DANIEL, istek: int | None = None,
+) -> str:
+    """Token kolačića: `istek.subjekt.potpis`. Subjekt je Daniel ili probni kod posjetitelja."""
+    istek = istek if istek is not None else int((sada or time.time()) + TRAJANJE_S)
+    return f"{istek}.{subjekt}.{_potpis(tajna, f'{istek}.{subjekt}')}"
+
+
+def procitaj(token: str | None, tajna: str, sada: float | None = None) -> str | None:
+    """Subjekt iz valjanog, neisteklog tokena — inače None."""
+    if not token:
+        return None
+    dijelovi = token.split(".")
+    if len(dijelovi) == 2:
+        # Tokeni izdani prije 14.10. (samo Daniel) — ne odjavljujemo ga usred sajma.
+        istek_tekst, potpis = dijelovi
+        subjekt, poruka = DANIEL, istek_tekst
+    elif len(dijelovi) == 3:
+        istek_tekst, subjekt, potpis = dijelovi
+        poruka = f"{istek_tekst}.{subjekt}"
+    else:
+        return None
+    if not istek_tekst.isdigit() or int(istek_tekst) < (sada or time.time()):
+        return None
+    return subjekt if hmac.compare_digest(potpis, _potpis(tajna, poruka)) else None
 
 
 def vrijedi(token: str | None, tajna: str, sada: float | None = None) -> bool:
-    if not token or "." not in token:
-        return False
-    istek_tekst, potpis = token.split(".", 1)
-    if not istek_tekst.isdigit():
-        return False
-    istek = int(istek_tekst)
-    if istek < (sada or time.time()):
-        return False
-    return hmac.compare_digest(potpis, _potpis(tajna, istek))
+    return procitaj(token, tajna, sada) is not None
 
 
 class Brana:

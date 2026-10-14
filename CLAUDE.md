@@ -15,6 +15,7 @@ app/slog.py      eURA.txt — 1:1 s kyuro-demo src/lib/slog (isti testovi polož
 app/posta.py     Brevo mail s privitcima · app/tekstovi.py tekst maila (HR)
 app/crm.py       Attio: osoba po mailu → tvrtka → posao „Lead" → bilješka
 app/dnevnik.py   data/leadovi.jsonl — upisuje se PRIJE maila i Attia
+app/pristup.py   probni kodovi posjetitelja (7 dana, 20 čitanja) · app/prijava.py kolačić: Daniel ili proba
 web/             PWA (index.html, app.js, stil.css, sw.js, manifest)
 deploy/          systemd jedinica + nginx isječak (snippets/sajam.conf)
 ```

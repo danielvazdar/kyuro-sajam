@@ -32,6 +32,9 @@ def klijent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestCli
     monkeypatch.setenv("SAJAM_LOZINKA_HASH", LOZINKA_HASH)
     monkeypatch.setenv("SAJAM_TAJNA", "tajna-za-test")
     monkeypatch.setattr(main, "_brana_prijave", prijava.Brana())
+    # Nijedan test ne smije stvarno slati mail; testovi koji ga provjeravaju podmeću svoj.
+    monkeypatch.setattr(posta, "posalji", lambda _p, _poruka: "id-zadano")
+    main._spremiste.cache_clear()
     main.postavke.cache_clear()
     klijent = TestClient(main.app, base_url="https://testserver")
     assert klijent.post("/api/prijava", json={"lozinka": "ispravna"}).status_code == 200
@@ -176,11 +179,16 @@ def test_prijava_daje_trajni_sigurni_kolacic(klijent: TestClient) -> None:
 
 def test_token_istekne_i_ne_da_se_krivotvoriti() -> None:
     token = prijava.izdaj("tajna", sada=1000)
-    assert prijava.vrijedi(token, "tajna", sada=2000)
+    assert prijava.procitaj(token, "tajna", sada=2000) == prijava.DANIEL
     assert not prijava.vrijedi(token, "tajna", sada=1000 + prijava.TRAJANJE_S + 1)
     assert not prijava.vrijedi(token, "druga-tajna", sada=2000)
-    istek, potpis = token.split(".")
-    assert not prijava.vrijedi(f"{int(istek) + 999}.{potpis}", "tajna", sada=2000)
+    istek, subjekt, potpis = token.split(".")
+    assert not prijava.vrijedi(f"{int(istek) + 999}.{subjekt}.{potpis}", "tajna", sada=2000)
+    # posjetitelj se ne može prepisati u Daniela
+    proba = prijava.izdaj("tajna", subjekt=prijava.subjekt_probe("ABCDEFGH"), istek=5000)
+    i, _s, pot = proba.split(".")
+    assert prijava.procitaj(f"{i}.daniel.{pot}", "tajna", sada=2000) is None
+
 
 
 def test_vise_fotografija_ide_u_privitak(
@@ -211,12 +219,16 @@ def test_lead_se_upisuje_prije_demonstracije(
 ) -> None:
     leadovi: list[dict[str, Any]] = []
     monkeypatch.setattr(crm, "upisi_lead", lambda _a, **kw: leadovi.append(kw) or "osoba-1")
-    monkeypatch.setattr(posta, "posalji", lambda _p, _poruka: pytest.fail("lead ne šalje mail"))
+    poslano: list[dict[str, Any]] = []
+    monkeypatch.setattr(posta, "posalji", lambda _p, poruka: poslano.append(poruka) or "id")
     odgovor = klijent.post("/api/lead", json=_posjetitelj())
-    assert odgovor.json() == {"ok": True, "attio": True}
+    assert odgovor.json() == {"ok": True, "attio": True, "dobrodoslica": True}
+    assert poslano[0]["subject"] == "Dobrodošli u Kyuro F1"
+    assert "?kod=" in str(poslano[0]["htmlContent"])
     assert leadovi[0]["email"] == "ana@ured.hr"
     assert "Accept" in leadovi[0]["biljeska"]
-    assert [z["dogadaj"] for z in dnevnik.procitaj_sve(tmp_path)] == ["lead", "attio_upisan"]
+    dogadaji = [z["dogadaj"] for z in dnevnik.procitaj_sve(tmp_path)]
+    assert dogadaji == ["lead", "attio_upisan", "dobrodoslica"]
 
 
 def test_lead_pad_attia_ne_zaustavlja_demo(
@@ -226,10 +238,94 @@ def test_lead_pad_attia_ne_zaustavlja_demo(
         raise crm.GreskaAttio("503")
 
     monkeypatch.setattr(crm, "upisi_lead", pada)
-    assert klijent.post("/api/lead", json=_posjetitelj()).json() == {"ok": True, "attio": False}
+    tijelo = klijent.post("/api/lead", json=_posjetitelj()).json()
+    assert tijelo["ok"] is True and tijelo["attio"] is False
     assert dnevnik.procitaj_sve(tmp_path)[0]["email"] == "ana@ured.hr"
 
 
 @pytest.mark.parametrize("izmjena", [{"privola": False}, {"email": "x"}, {"racuni": []}])
 def test_lead_neispravan_se_odbija(klijent: TestClient, izmjena: dict[str, Any]) -> None:
     assert klijent.post("/api/lead", json=_posjetitelj(**izmjena)).status_code in (400, 422)
+
+
+
+def _kod_iz_maila(poruka: dict[str, Any]) -> str:
+    import re
+
+    pogodak = re.search(r"\?kod=([A-Z0-9-]+)", str(poruka["htmlContent"]))
+    assert pogodak
+    return pogodak.group(1)
+
+
+@pytest.fixture
+def proba(klijent: TestClient, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, str]:
+    """Daniel upiše posjetitelja; posjetitelj se prijavi kodom iz maila dobrodošlice."""
+    poslano: list[dict[str, Any]] = []
+    monkeypatch.setattr(posta, "posalji", lambda _p, poruka: poslano.append(poruka) or "id")
+    monkeypatch.setattr(crm, "upisi_lead", lambda _a, **_kw: "osoba")
+    klijent.post("/api/lead", json=_posjetitelj(email="ana@ured.hr", ime="Ana"))
+    kod = _kod_iz_maila(poslano[0])
+    klijent.cookies.clear()
+    assert klijent.post("/api/prijava", json={"lozinka": kod.lower()}).status_code == 200
+    return klijent, kod
+
+
+def test_proba_prijava_kodom(proba: tuple[TestClient, str]) -> None:
+    klijent, _kod = proba
+    ja = klijent.get("/api/ja").json()
+    assert ja["uloga"] == "proba" and ja["email"] == "ana@ured.hr"
+    assert ja["preostalo_citanja"] == 20
+
+
+def test_proba_ne_moze_upisivati_leadove(proba: tuple[TestClient, str]) -> None:
+    klijent, _kod = proba
+    assert klijent.post("/api/lead", json=_posjetitelj(email="x@y.hr")).status_code == 403
+
+
+def test_proba_salje_samo_na_svoju_adresu(
+    proba: tuple[TestClient, str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    klijent, _kod = proba
+    poslano: list[dict[str, Any]] = []
+    monkeypatch.setattr(posta, "posalji", lambda _p, poruka: poslano.append(poruka) or "id")
+    klijent.post("/api/posalji", json=_slanje(email="napadac@zlo.hr"))
+    assert poslano[0]["to"][0]["email"] == "ana@ured.hr"
+    assert "očitali u Kyuro F1" in str(poslano[0]["htmlContent"])
+
+
+def test_proba_ima_granicu_citanja(
+    proba: tuple[TestClient, str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import pristup
+
+    klijent, _kod = proba
+    monkeypatch.setattr(main, "procitaj", lambda *_a: [RACUN])
+    monkeypatch.setattr(pristup, "MAKS_CITANJA", 2)
+    datoteka = {"fotografija": ("a.jpg", _jpeg(), "image/jpeg")}
+    assert klijent.post("/api/procitaj", files=datoteka).status_code == 200
+    assert klijent.post("/api/procitaj", files=datoteka).status_code == 200
+    assert klijent.post("/api/procitaj", files=datoteka).status_code == 429
+
+
+def test_istekla_proba_ne_prolazi(proba: tuple[TestClient, str], tmp_path: Path) -> None:
+    import json
+
+    klijent, _kod = proba
+    putanja = tmp_path / "pristupi.json"
+    zapisi = json.loads(putanja.read_text())
+    for zapis in zapisi.values():
+        zapis["istek"] = "2020-01-01T00:00:00+00:00"
+    putanja.write_text(json.dumps(zapisi))
+    assert klijent.get("/api/ja").status_code == 401
+
+
+def test_isti_posjetitelj_dvaput_isti_kod(tmp_path: Path) -> None:
+    from app.pristup import Spremiste, je_kod, normaliziraj
+
+    spremiste = Spremiste(tmp_path)
+    prvi = spremiste.izdaj(email="a@b.hr", ime="A")
+    assert spremiste.izdaj(email="a@b.hr", ime="A").kod == prvi.kod
+    assert spremiste.izdaj(email="c@d.hr", ime="C").kod != prvi.kod
+    assert je_kod(prvi.za_prikaz) and je_kod(prvi.za_prikaz.lower())
+    assert not je_kod("moja-duga-lozinka-123")
+    assert normaliziraj(" kq7m-4rtx ") == "KQ7M4RTX"

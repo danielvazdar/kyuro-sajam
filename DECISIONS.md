@@ -30,3 +30,9 @@
 - Isporuka: PWA s poveznice + login po uredu, **bez trgovina aplikacija**. Daniel je hosta i licencira.
 - Prije prvog kupca: računi po uredu (multi-tenant), brojač dokumenata, brisanje fotografija nakon 30 dana, DPA.
 - Odbačeno: 1.000 € + 50 €/mj (prevelik ulaz za tako malu app), 49 €/mj, 30-dnevni probni rok.
+
+## 2026-10-14 — svaki posjetitelj dobiva dobrodošlicu i 7 dana probe (Daniel)
+- Nakon podataka posjetitelja: 3 ekrana dobrodošlice, automatski mail dobrodošlice s **osobnim pristupnim kodom** (KQ7M-4RTX) i gumbom koji prijavljuje (?kod=).
+- Kod, a ne samo poveznica: iPhone aplikacija s početnog zaslona ne dijeli kolačiće sa Safarijem.
+- Na probi: bez ekrana podataka, mail uvijek na njegovu adresu (poslužitelj prepisuje adresu), **20 čitanja** (granica troška), istek 7 dana; Attio dobiva bilješku „SAM koristi probu”.
+- Kodovi u data/pristupi.json (atomično pisanje). Isti posjetitelj dvaput = isti kod.
