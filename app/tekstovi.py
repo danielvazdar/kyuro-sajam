@@ -43,10 +43,10 @@ def _esc(tekst: str) -> str:
 
 def _znacka(cist: bool) -> str:
     boja, pozadina, tekst = (
-        (_KADULJA, _KADULJA_SV, "u redu") if cist else (_JANTAR, _JANTAR_SV, "provjeriti")
+        (_KADULJA, _KADULJA_SV, "OK") if cist else (_JANTAR, _JANTAR_SV, "provjeriti")
     )
     return (f'<span style="display:inline-block;padding:2px 8px;border-radius:10px;'
-            f'background:{pozadina};color:{boja};font-size:12px;font-weight:bold">{tekst}</span>')
+            f'white-space:nowrap;background:{pozadina};color:{boja};font-size:12px;font-weight:bold">{tekst}</span>')
 
 
 def _redak(racun: Racun) -> str:

@@ -29,3 +29,11 @@ def test_podaci_racuna_su_escapeani() -> None:
     html = mail_html(ime="Ana", racuni=[RACUN])
     assert "<b>Zli</b>" not in html
     assert "&lt;b&gt;Zli&lt;/b&gt; &amp; d.o.o." in html
+
+
+def test_znacka_stane_u_jedan_redak() -> None:
+    # 14.10.: „u redu" se na mobitelu lomilo u dva retka — sada „OK" i bez prijeloma.
+    html = mail_html(ime="", racuni=[RACUN.model_copy(update={"dobavljac": "INA"})])
+    assert ">OK</span>" in html
+    assert "u redu" not in html
+    assert "white-space:nowrap;" in html
