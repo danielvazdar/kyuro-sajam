@@ -21,7 +21,7 @@ def test_daniel_je_posjetitelj_a_ne_izlagac() -> None:
 def test_zaglavlje_s_logom_i_iznosi_hr() -> None:
     html = mail_html(ime="", racuni=[RACUN])
     assert "kyuro-logo.png" in html
-    assert "1.234,50 €" in html
+    assert "1.234,50&nbsp;€" in html
     assert "Poštovani," in html
 
 

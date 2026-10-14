@@ -33,7 +33,8 @@ _FONT = "Helvetica,Arial,sans-serif"
 def _eur(iznos: Decimal) -> str:
     cijeli, decimale = f"{iznos:.2f}".split(".")
     s_tockama = f"{int(cijeli):,}".replace(",", ".")
-    return f"{s_tockama},{decimale} €"
+    # Nedjeljivi razmak: iPhone Mail inače prelomi „50,00" i „€" u dva retka.
+    return f"{s_tockama},{decimale}&nbsp;€"
 
 
 def _esc(tekst: str) -> str:
@@ -45,21 +46,26 @@ def _znacka(cist: bool) -> str:
     boja, pozadina, tekst = (
         (_KADULJA, _KADULJA_SV, "OK") if cist else (_JANTAR, _JANTAR_SV, "provjeriti")
     )
-    return (f'<span style="display:inline-block;padding:2px 8px;border-radius:10px;'
-            f'white-space:nowrap;background:{pozadina};color:{boja};font-size:12px;font-weight:bold">{tekst}</span>')
+    return (f'<span style="display:inline-block;margin-top:4px;padding:2px 8px;'
+            f"border-radius:10px;white-space:nowrap;background:{pozadina};color:{boja};"
+            f'font-size:12px;font-weight:bold">{tekst}</span>')
 
 
 def _redak(racun: Racun) -> str:
+    """Dva stupca: lijevo tko i što, desno iznos sa značkom ispod.
+
+    14.10.: tri stupca nisu stala na iPhone — iznos i „provjeriti" lomili su se po slovima.
+    """
     cist = not upozorenja(racun) and not racun.nesigurno
-    celija = f"padding:10px 8px;border-bottom:1px solid {_RUB};vertical-align:top"
+    celija = f"padding:12px 0;border-bottom:1px solid {_RUB};vertical-align:top"
     vrsta = "Slip" if racun.vrsta == "slip" else "Račun"
     return (
         "<tr>"
-        f'<td style="{celija}"><b>{_esc(racun.dobavljac)}</b><br>'
-        f'<span style="color:{_TINTA_2};font-size:12px">{vrsta} {_esc(racun.broj_racuna)}'
-        f' · {racun.datum_racuna:%d.%m.%Y.}</span></td>'
-        f'<td style="{celija};text-align:right;white-space:nowrap"><b>{_eur(racun.ukupno)}</b></td>'
-        f'<td style="{celija};text-align:right">{_znacka(cist)}</td>'
+        f'<td style="{celija};padding-right:12px"><b>{_esc(racun.dobavljac)}</b><br>'
+        f'<span style="color:{_TINTA_2};font-size:13px">{vrsta} {_esc(racun.broj_racuna)}'
+        f"<br>{racun.datum_racuna:%d.%m.%Y.}</span></td>"
+        f'<td style="{celija};text-align:right;white-space:nowrap;width:1%">'
+        f"<b>{_eur(racun.ukupno)}</b><br>{_znacka(cist)}</td>"
         "</tr>"
     )
 
@@ -73,16 +79,13 @@ height:28px;width:130px;font:bold 24px {_FONT};color:{_TINTA}">
 
 def _tablica(racuni: Sequence[Racun]) -> str:
     ukupno = sum((r.ukupno for r in racuni), Decimal("0"))
-    zaglavlje = (f"padding:8px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;"
-                 f"color:{_TINTA_2};border-bottom:1px solid {_RUB}")
     return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-style="border-collapse:collapse;font-size:14px;margin:4px 0 8px">
-<tr><td style="{zaglavlje};text-align:left">Dobavljač</td>
-<td style="{zaglavlje};text-align:right">Iznos</td><td style="{zaglavlje}"></td></tr>
+style="border-collapse:collapse;font-size:15px;margin:4px 0 8px;border-top:1px solid {_RUB}">
 {"".join(_redak(r) for r in racuni)}
-<tr><td style="padding:12px 8px"><b>Ukupno · {len(racuni)} dokumenata</b></td>
-<td style="padding:12px 8px;text-align:right;white-space:nowrap"><b>{_eur(ukupno)}</b></td>
-<td></td></tr></table>"""
+<tr><td style="padding:14px 12px 0 0"><b>Ukupno</b>
+<span style="color:{_TINTA_2};font-size:13px">· {len(racuni)} dok.</span></td>
+<td style="padding:14px 0 0;text-align:right;white-space:nowrap;width:1%">
+<b>{_eur(ukupno)}</b></td></tr></table>"""
 
 
 def _privitci() -> str:
@@ -151,7 +154,7 @@ zanima kako bi to izgledalo kod Vas, odgovorite na ovu poruku ili me nazovite.</
 
     return f"""<!doctype html><html lang="hr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:{_PAPIR}">
+<body style="margin:0;padding:0;background:{_PAPIR};-webkit-text-size-adjust:100%">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{_PAPIR}">
 <tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;
