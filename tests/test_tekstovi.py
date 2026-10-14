@@ -54,3 +54,11 @@ def test_mnozina_dokumenata() -> None:
         "1 dokument", "3 dokumenta", "5 dokumenata", "11 dokumenata", "12 dokumenata",
         "21 dokument", "22 dokumenta",
     ]
+
+
+def test_poziv_na_termin_a_ne_na_telefon() -> None:
+    # Daniel 14.10.: ne želi pozive ni poruke — gumb vodi na Cal.com, popunjen imenom i adresom.
+    html = mail_html(ime="Ana <Horvat>", racuni=[RACUN], email="ana@ured.hr")
+    assert "tel:" not in html
+    assert "https://cal.eu/kyuro/fit-call?name=Ana+%3CHorvat%3E&amp;email=ana%40ured.hr" in html
+    assert "Poštovani Ana &lt;Horvat&gt;," in html

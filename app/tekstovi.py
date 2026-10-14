@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from app.model import Racun, upozorenja
 
 MAIL_NASLOV = "Vaši računi sa sajma Accept, spremni za Synesis"
 
-_TELEFON = "097 612 4852"
-_TELEFON_LINK = "+385976124852"
+# Daniel 14.10.: bez poziva i poruka na mobitel — odgovor na mail ili termin u Cal.com.
+_TERMIN = "https://cal.eu/kyuro/fit-call"
 _LOGO = "https://kyuro.tech/brand/kyuro-logo.png"  # 260×55, prikazuje se upola za oštrinu na retini
 
 # Kyuro paleta (ista kao kyuro.tech i demo)
@@ -129,17 +130,20 @@ def _koraci() -> str:
             f'<table role="presentation" cellpadding="0" cellspacing="0">{retci}</table>')
 
 
-def _gumb() -> str:
+def _gumb(*, ime: str, email: str) -> str:
+    """Gumb za rezervaciju razgovora; Cal.com unaprijed popuni ime i adresu."""
+    popunjeno = {k: v for k, v in (("name", ime), ("email", email)) if v}
+    poveznica = _esc(f"{_TERMIN}?{urlencode(popunjeno)}" if popunjeno else _TERMIN)
     return f"""<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 24px">
 <tr><td style="border-radius:10px;background:{_GLINA}">
-<a href="tel:{_TELEFON_LINK}" style="display:inline-block;padding:12px 22px;color:#ffffff;
-font-weight:bold;font-size:15px;text-decoration:none">Nazovite me: {_TELEFON}</a>
+<a href="{poveznica}" style="display:inline-block;padding:12px 22px;color:#ffffff;
+font-weight:bold;font-size:15px;text-decoration:none">Odaberite termin za razgovor</a>
 </td></tr></table>"""
 
 
-def mail_html(*, ime: str, racuni: Sequence[Racun]) -> str:
-    """`ime` stiže već escapean; podaci računa escapeaju se ovdje."""
-    pozdrav = f"Poštovani {ime}," if ime else "Poštovani,"
+def mail_html(*, ime: str, racuni: Sequence[Racun], email: str = "") -> str:
+    """Sve što stiže od posjetitelja (ime, podaci računa) escapea se ovdje."""
+    pozdrav = f"Poštovani {_esc(ime)}," if ime else "Poštovani,"
     tijelo = f"""
 <p style="margin:0 0 14px">{pozdrav}</p>
 <p style="margin:0 0 18px">hvala Vam na ugodnom razgovoru danas na sajmu Accept u Zagrebu.
@@ -154,8 +158,9 @@ testnu kopiju knjige.</p>
 <h2 style="font-size:16px;margin:28px 0 8px;color:{_TINTA}">A u Vašem uredu?</h2>
 <p style="margin:0 0 14px">Tamo to može raditi bez fotografiranja: računi koji stignu
 e-poštom ili kao PDF sami se očitaju, a Vi ih samo pregledate i kliknete na uvoz. Ako Vas
-zanima kako bi to izgledalo kod Vas, odgovorite na ovu poruku ili me nazovite.</p>
-{_gumb()}
+zanima kako bi to izgledalo kod Vas, odaberite termin za kratak razgovor ili jednostavno
+odgovorite na ovu poruku.</p>
+{_gumb(ime=ime, email=email)}
 <p style="margin:0">Lijep pozdrav,<br><b>Daniel Vazdar</b><br>
 <span style="color:{_TINTA_2}">Kyuro · automatizacija knjigovodstva</span><br>
 <a href="https://kyuro.tech" style="color:{_GLINA}">kyuro.tech</a></p>"""

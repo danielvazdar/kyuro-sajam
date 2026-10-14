@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import csv
-import html
 import io
 import logging
 from collections.abc import Sequence
@@ -75,7 +74,7 @@ def sastavi(
         "to": [{"email": primatelj, **({"name": ime} if ime else {})}],
         "replyTo": {"email": postavke.odgovor_na, "name": "Daniel Vazdar, Kyuro"},
         "subject": MAIL_NASLOV,
-        "htmlContent": mail_html(ime=html.escape(ime), racuni=racuni),
+        "htmlContent": mail_html(ime=ime, racuni=racuni, email=primatelj),
         "attachment": privitci,
         "tags": ["sajam"],
     }
