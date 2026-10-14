@@ -1,6 +1,6 @@
 // Service worker: ljuska aplikacije radi i na lošem sajamskom Wi-Fiju.
 // /api/ se NIKAD ne kešira — čitanje i slanje moraju ići na poslužitelj ili javno pasti.
-const VERZIJA = 'sajam-v5'
+const VERZIJA = 'sajam-v6'
 const LJUSKA = [
   './', 'index.html', 'stil.css', 'app.js', 'manifest.webmanifest',
   'ikone/ikona-192.png', 'ikone/ikona-512.png', 'ikone/apple-touch.png',
@@ -33,7 +33,7 @@ self.addEventListener('fetch', (dogadaj) => {
     return odgovor
   })
   dogadaj.respondWith(
-    caches.match(dogadaj.request, { ignoreSearch: true })
+    caches.match(dogadaj.request, { ignoreSearch: true, ignoreVary: true })
       .then((spremljeno) => spremljeno || izMreze.catch(() => caches.match('index.html'))),
   )
   dogadaj.waitUntil(izMreze.then(() => undefined, () => undefined))
