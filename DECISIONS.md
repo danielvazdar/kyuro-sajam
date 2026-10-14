@@ -13,3 +13,4 @@
 - Na iPhoneu je aplikacija s početnog zaslona čekala 10–15 s na okvir lozinke i nije pamtila prijavu.
 - Sada: ista lozinka kao demo (apr1 hash kopiran u .env), HttpOnly/Secure/SameSite=Strict kolačić 60 dana, 10 krivih pokušaja / 15 min.
 - Ljuska je javna i otvara se iz service workera (spremnik prvi); API bez prijave vraća 401.
+- 2026-10-14: čitač effort medium → low (6–7 s umjesto 9–11 s po listu, ista točnost na probnom listu).

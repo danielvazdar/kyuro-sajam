@@ -29,8 +29,9 @@ logger = logging.getLogger(__name__)
 
 MODEL = "claude-opus-5-5"
 MAX_TOKENS = 16000
-# Na sajmu posjetitelj čeka pred štandom: brzina je dio demonstracije.
-EFFORT: Final = "medium"
+# Posjetitelj čeka pred Danielom: brzina je dio demonstracije. 14.10. mjereno na listu s 3 računa:
+# medium 9–11 s, low 6–7 s, ista točnost polja. Zbrojeve i OIB ionako provjerava kod.
+EFFORT: Final = "low"
 
 _POLJA_IZNOSA = (
     "ukupno", "bez_pdv", "osnovica5", "pdv5", "osnovica13", "pdv13", "osnovica25", "pdv25",
