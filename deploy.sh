@@ -28,8 +28,10 @@ echo "→ web"
 rsync -az --delete --chmod=D755,F644 web/ "${VPS}:${WEB_DIR}/"
 
 echo "→ provjera na odredištu"
-sleep 2
-ssh "$VPS" "curl -sf http://127.0.0.1:8020/api/zdravlje" >/dev/null && echo "✓ servis odgovara"
+# Uvicorn treba nekoliko sekundi nakon restarta; jedan pokušaj odmah bi lažno pao.
+ssh "$VPS" 'for i in $(seq 1 15); do curl -sf http://127.0.0.1:8020/api/zdravlje >/dev/null && exit 0; sleep 1; done; exit 1' \
+  || { echo "✗ servis ne odgovara nakon restarta" >&2; exit 1; }
+echo "✓ servis odgovara"
 KOD="$(curl -s -o /dev/null -w '%{http_code}' https://demo.kyuro.tech/sajam/ || echo 000)"
 PRAZNA="$(curl -s -o /dev/null -w '%{http_code}' -u 'demo:' https://demo.kyuro.tech/sajam/ || echo 000)"
 [ "$KOD" = "401" ] && echo "✓ /sajam/ je gore i zaključan" || { echo "✗ /sajam/ vraća $KOD (očekivano 401)" >&2; exit 1; }
