@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from app.model import Racun, upozorenja
 
-MAIL_NASLOV = "Vaši računi sa sajma, spremni za Synesis"
+MAIL_NASLOV = "Vaši računi sa sajma spremni su za Synesis"
 
 _TELEFON = "097 612 4852"
 _TELEFON_LINK = "+385976124852"
@@ -49,7 +49,7 @@ def mail_html(*, ime: str, racuni: Sequence[Racun]) -> str:
 <div style="max-width:600px;margin:0 auto;padding:24px;font-family:Arial,Helvetica,sans-serif;
 color:#111827;font-size:15px;line-height:1.55;background:#ffffff">
 <p>{pozdrav}</p>
-<p>hvala što ste svratili na naš štand. U privitku su računi koje smo zajedno skenirali:</p>
+<p>hvala Vam što ste svratili na naš štand. U privitku su računi koje smo zajedno skenirali:</p>
 <table style="border-collapse:collapse;width:100%;font-size:14px;margin:12px 0">
 <thead><tr style="background:#f3f4f6;text-align:left">
 <th style="padding:6px 8px">Dobavljač</th><th style="padding:6px 8px">Broj</th>
@@ -60,24 +60,24 @@ color:#111827;font-size:15px;line-height:1.55;background:#ffffff">
 </table>
 <p><b>U privitku su tri datoteke:</b></p>
 <ul style="padding-left:20px">
-<li><b>eURA.txt</b>: knjiga ulaznih računa u obliku koji Synesis učitava</li>
-<li><b>pregled-racuna.csv</b>: isti podaci za Excel</li>
-<li><b>fotografija.jpg</b>: snimka lista s računima</li>
+<li><b>eURA.txt</b>: knjiga ulaznih računa u obliku koji se učitava u Synesis</li>
+<li><b>pregled-racuna.csv</b>: isti podaci pripremljeni za Excel</li>
+<li><b>fotografija.jpg</b>: fotografija lista s računima</li>
 </ul>
 <p><b>Kako ih učitati u Synesis:</b></p>
 <ol style="padding-left:20px">
-<li>Spremite eURA.txt u <b>korijen diska</b>, na primjer na USB stick (E:\\eURA.txt).
-Synesis datoteku traži samo tamo.</li>
+<li>Spremite eURA.txt u <b>korijen diska</b>, primjerice na USB memoriju (E:\\eURA.txt).
+Synesis tu datoteku traži upravo ondje.</li>
 <li>U Synesisu otvorite dokument <b>e-URA</b> i kliknite <b>Učitaj iz datoteke</b>.</li>
-<li>Odaberite disk i pregledajte račune prije spremanja.</li>
+<li>Odaberite disk pa pregledajte račune prije spremanja.</li>
 </ol>
-<p style="color:#6b7280;font-size:13px">Ovo je demonstracija: računi označeni s „provjeriti”
+<p style="color:#6b7280;font-size:13px">Ovo je pokazni primjer: računi označeni s „provjeriti”
 zahtijevaju Vaš pregled, a datoteku je najbolje prvo učitati u testnu kopiju knjige.</p>
-<p>U Vašem uredu ovo radi bez fotografiranja: računi koji stignu mailom ili kao PDF
-pročitaju se sami, a Vi samo pregledate i kliknete uvoz. Ako Vas zanima kako bi to
-izgledalo kod Vas, javite se na ovaj mail ili na
+<p>U Vašem uredu to može raditi bez fotografiranja: računi koji stignu e-poštom ili kao PDF
+sami se očitaju, a Vi ih samo pregledate i kliknete na uvoz. Ako Vas zanima kako bi to
+izgledalo kod Vas, javite se odgovorom na ovu poruku ili na
 <a href="tel:{_TELEFON_LINK}">{_TELEFON}</a>.</p>
 <p>Lijep pozdrav,<br>Daniel Vazdar<br>Kyuro · <a href="https://kyuro.tech">kyuro.tech</a></p>
-<p style="color:#9ca3af;font-size:12px">Ovaj mail ste dobili jer ste na sajmu ostavili
-adresu. Ako ne želite da Vam se ponovno javimo, samo odgovorite s „odjava”.</p>
+<p style="color:#9ca3af;font-size:12px">Ovu ste poruku primili jer ste na sajmu ostavili
+adresu. Ako ne želite da Vam se ponovno obratimo, samo odgovorite s „odjava”.</p>
 </div></body></html>"""

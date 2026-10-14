@@ -1,0 +1,23 @@
+# systemd jedinica za sajamski F1 demo. Instalacija (jednom):
+#   sudo cp deploy/kyuro-sajam.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now kyuro-sajam
+[Unit]
+Description=Kyuro sajam (F1 demo, demo.kyuro.tech/sajam)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=daniel
+WorkingDirectory=/home/daniel/kyuro-sajam
+EnvironmentFile=/home/daniel/kyuro-sajam/.env
+Environment=DATA_DIR=/home/daniel/kyuro-sajam/data
+ExecStart=/home/daniel/kyuro-sajam/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8020 --proxy-headers --no-access-log
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/daniel/kyuro-sajam/data
+
+[Install]
+WantedBy=multi-user.target
