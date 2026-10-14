@@ -6,7 +6,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-_OBAVEZNO = ("ANTHROPIC_API_KEY", "BREVO_API_KEY", "ATTIO_API_KEY")
+_OBAVEZNO = (
+    "ANTHROPIC_API_KEY", "BREVO_API_KEY", "ATTIO_API_KEY", "SAJAM_LOZINKA_HASH", "SAJAM_TAJNA",
+)
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,8 @@ class Postavke:
     odgovor_na: str
     kampanja: str
     test_adrese: frozenset[str]
+    lozinka_hash: str  # apr1 hash iz /etc/nginx/.htpasswd-demo — ista lozinka kao demo
+    tajna: str  # potpisuje kolačić prijave
 
     @classmethod
     def iz_okoline(cls) -> Postavke:
@@ -37,4 +41,6 @@ class Postavke:
             test_adrese=frozenset(
                 a.strip().lower() for a in os.getenv("TEST_ADRESE", "").split(",") if a.strip()
             ),
+            lozinka_hash=os.environ["SAJAM_LOZINKA_HASH"],
+            tajna=os.environ["SAJAM_TAJNA"],
         )

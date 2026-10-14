@@ -20,6 +20,19 @@
   </header>
 
   <main>
+    <!-- 0. Prijava (jednom u 60 dana) -->
+    <section id="korak-prijava" class="korak" hidden>
+      <h1>Prijava</h1>
+      <p class="tiho">Ista lozinka kao za demo. Aplikacija Vas pamti 60 dana.</p>
+      <form id="prijava-obrazac" novalidate>
+        <label>Lozinka
+          <input type="password" name="lozinka" autocomplete="current-password" required>
+        </label>
+        <p class="greska" id="prijava-greska" role="alert" hidden></p>
+        <button type="submit" class="gumb glavni velik" id="prijava-gumb">Prijava</button>
+      </form>
+    </section>
+
     <!-- 1. Fotografija -->
     <section id="korak-foto" class="korak">
       <h1>Fotografirajte list s računima</h1>

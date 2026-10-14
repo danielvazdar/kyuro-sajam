@@ -135,7 +135,8 @@ h2 { font-size: 19px; margin: 28px 0 6px; }
 .polja label.siroko { grid-column: 1 / -1; }
 
 label { display: block; font-size: 13px; font-weight: 600; color: var(--tinta-2); }
-input[type=text], input[type=email], input[type=date], input[inputmode=decimal] {
+input[type=text], input[type=email], input[type=password], input[type=date],
+input[inputmode=decimal] {
   display: block; width: 100%; margin-top: 4px; padding: 10px 12px; min-height: 44px;
   border: 1px solid var(--rub); border-radius: 10px; background: #fff;
   font: inherit; font-size: 16px; color: var(--tinta);

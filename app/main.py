@@ -1,7 +1,7 @@
 """Sajamski F1 demo: fotografija → računi → eURA.txt → mail posjetitelju + lead u Attio.
 
-Iza nginxa na demo.kyuro.tech/sajam/, pod istom osnovnom autentikacijom kao demo.
-Rute: POST /api/procitaj · POST /api/eura · POST /api/posalji · GET /api/zdravlje
+Iza nginxa na demo.kyuro.tech/sajam/. Prijava je u aplikaciji (`app/prijava.py`), ne u nginxu.
+Javno: GET /api/zdravlje · POST /api/prijava. Sve ostalo traži kolačić prijave.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import anthropic
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app import crm, dnevnik, posta
+from app import crm, dnevnik, posta, prijava
 from app.citac import GreskaCitanja, procitaj
 from app.config import Postavke
 from app.model import Racun, upozorenja
@@ -97,12 +97,53 @@ def u_json(racun: Racun) -> dict[str, Any]:
     return {**racun.model_dump(mode="json"), "upozorenja": upozorenja(racun)}
 
 
+_brana_prijave = prijava.Brana()
+
+
+def prijavljen(
+    p: Annotated[Postavke, Depends(postavke)],
+    token: Annotated[str | None, Cookie(alias=prijava.KOLACIC)] = None,
+) -> None:
+    if not prijava.vrijedi(token, p.tajna):
+        raise HTTPException(401, "Prijavite se.")
+
+
+Zasticeno = [Depends(prijavljen)]
+
+
 @app.get("/api/zdravlje")
 def zdravlje() -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.post("/api/procitaj")
+class Prijava(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lozinka: str = Field(max_length=200)
+
+
+@app.post("/api/prijava")
+def prijavi(
+    podaci: Prijava, odgovor: Response, p: Annotated[Postavke, Depends(postavke)],
+) -> dict[str, bool]:
+    if _brana_prijave.zatvorena():
+        raise HTTPException(429, "Previše pokušaja. Pričekajte 15 minuta.")
+    if not prijava.lozinka_ispravna(podaci.lozinka, p.lozinka_hash):
+        _brana_prijave.promasaj()
+        logger.warning("prijava: kriva lozinka")
+        raise HTTPException(401, "Kriva lozinka.")
+    odgovor.set_cookie(
+        prijava.KOLACIC, prijava.izdaj(p.tajna), max_age=prijava.TRAJANJE_S,
+        path="/", secure=True, httponly=True, samesite="strict",
+    )
+    return {"ok": True}
+
+
+@app.get("/api/ja", dependencies=Zasticeno)
+def ja() -> dict[str, bool]:
+    return {"prijavljen": True}
+
+
+@app.post("/api/procitaj", dependencies=Zasticeno)
 def procitaj_fotografiju(
     fotografija: Annotated[UploadFile, File()],
     p: Annotated[Postavke, Depends(postavke)],
@@ -134,13 +175,13 @@ class Popis(BaseModel):
     racuni: list[Racun] = Field(min_length=1, max_length=MAKS_RACUNA)
 
 
-@app.post("/api/provjeri")
+@app.post("/api/provjeri", dependencies=Zasticeno)
 def provjeri(popis: Popis) -> dict[str, Any]:
     """Ponovna provjera nakon ručne izmjene na ekranu — pravila žive samo ovdje."""
     return {"racuni": [u_json(r) for r in popis.racuni]}
 
 
-@app.post("/api/eura", response_class=PlainTextResponse)
+@app.post("/api/eura", response_class=PlainTextResponse, dependencies=Zasticeno)
 def eura(popis: Popis) -> str:
     return datoteka_eura(popis.racuni)
 
@@ -178,7 +219,7 @@ def _biljeska(slanje: Slanje) -> str:
     ])
 
 
-@app.post("/api/posalji")
+@app.post("/api/posalji", dependencies=Zasticeno)
 def posalji(slanje: Slanje, p: Annotated[Postavke, Depends(postavke)]) -> dict[str, Any]:
     if not slanje.privola:
         raise HTTPException(400, "Bez privole ne šaljemo.")

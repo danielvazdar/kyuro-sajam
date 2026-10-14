@@ -17,7 +17,7 @@ strict = true
 packages = ["app"]
 
 [[tool.mypy.overrides]]
-module = ["PIL.*"]
+module = ["PIL.*", "passlib.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

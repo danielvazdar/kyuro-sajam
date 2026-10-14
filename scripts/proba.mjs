@@ -1,13 +1,15 @@
 // E2E proba sučelja na mobilnom ekranu: fotografija → računi → izmjena → eURA.txt → slanje.
 // Pravi backend (provjeri, eura); čitač i slanje su podmetnuti — bez troška i bez maila.
-// Pokretanje: node scripts/proba.mjs http://127.0.0.1:8021/   (snimke idu u ./snimke/)
+// Pokretanje: node scripts/proba.mjs http://localhost:8021/ [lozinka]   (snimke idu u ./snimke/)
+// Backend mora imati SAJAM_LOZINKA_HASH za tu lozinku (zadano: „proba”).
 import { mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 const require = createRequire(`${process.env.HOME}/PROJECT/KYURO/demo/package.json`)
 const { chromium, devices } = require('playwright')
 
-const ADRESA = process.argv[2] ?? 'http://127.0.0.1:8021/'
+const ADRESA = process.argv[2] ?? 'http://localhost:8021/'
+const LOZINKA = process.argv[3] ?? 'proba'
 mkdirSync('snimke', { recursive: true })
 
 const racun = (izmjene) => ({
@@ -33,7 +35,8 @@ const greske = []
 const preglednik = await chromium.launch()
 const stranica = await preglednik.newPage({ ...devices['iPhone 13'] })
 stranica.on('pageerror', (g) => greske.push(String(g)))
-stranica.on('console', (p) => p.type() === 'error' && greske.push(p.text()))
+// 401 je očekivan dio probe prijave (prvo otvaranje, kriva lozinka); sve ostalo je greška.
+stranica.on('console', (p) => p.type() === 'error' && !p.text().includes('status of 401') && greske.push(p.text()))
 
 await stranica.route('**/api/procitaj', async (ruta) => {
   await new Promise((r) => setTimeout(r, 1500))
@@ -48,7 +51,22 @@ await stranica.route('**/api/posalji', async (ruta) => {
 const tvrdi = (uvjet, poruka) => { if (!uvjet) throw new Error(`✗ ${poruka}`) }
 
 await stranica.goto(ADRESA)
+await stranica.waitForSelector('#korak-prijava:not([hidden])')
+await stranica.fill('input[name=lozinka]', 'kriva')
+await stranica.click('#prijava-gumb')
+await stranica.waitForSelector('#prijava-greska:not([hidden])')
+tvrdi(await stranica.textContent('#prijava-greska') === 'Kriva lozinka.', 'kriva lozinka odbijena')
+await stranica.screenshot({ path: 'snimke/0-prijava.png' })
+await stranica.fill('input[name=lozinka]', LOZINKA)
+await stranica.click('#prijava-gumb')
+await stranica.waitForSelector('#korak-foto:not([hidden])')
+await stranica.waitForTimeout(400)
 await stranica.screenshot({ path: 'snimke/1-pocetak.png' })
+
+// Drugo otvaranje: kolačić vrijedi, prijava se ne smije pojaviti
+await stranica.reload()
+await stranica.waitForTimeout(800)
+tvrdi(await stranica.isHidden('#korak-prijava'), 'prijava zapamćena nakon ponovnog otvaranja')
 
 // 1×1 JPEG je dovoljan: čitač je podmetnut
 const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64')

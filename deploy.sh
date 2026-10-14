@@ -32,8 +32,11 @@ echo "→ provjera na odredištu"
 ssh "$VPS" 'for i in $(seq 1 15); do curl -sf http://127.0.0.1:8020/api/zdravlje >/dev/null && exit 0; sleep 1; done; exit 1' \
   || { echo "✗ servis ne odgovara nakon restarta" >&2; exit 1; }
 echo "✓ servis odgovara"
-KOD="$(curl -s -o /dev/null -w '%{http_code}' https://demo.kyuro.tech/sajam/ || echo 000)"
-PRAZNA="$(curl -s -o /dev/null -w '%{http_code}' -u 'demo:' https://demo.kyuro.tech/sajam/ || echo 000)"
-[ "$KOD" = "401" ] && echo "✓ /sajam/ je gore i zaključan" || { echo "✗ /sajam/ vraća $KOD (očekivano 401)" >&2; exit 1; }
-[ "$PRAZNA" != "200" ] || { echo "✗ prazna lozinka prolazi" >&2; exit 1; }
+# Prijava je u aplikaciji (app/prijava.py). Bez kolačića svaka API ruta osim zdravlja mora vratiti 401.
+ZDRAVLJE="$(curl -s -o /dev/null -w '%{http_code}' https://demo.kyuro.tech/sajam/api/zdravlje || echo 000)"
+JA="$(curl -s -o /dev/null -w '%{http_code}' https://demo.kyuro.tech/sajam/api/ja || echo 000)"
+CITAJ="$(curl -s -o /dev/null -w '%{http_code}' -X POST https://demo.kyuro.tech/sajam/api/procitaj || echo 000)"
+[ "$ZDRAVLJE" = "200" ] && echo "✓ /sajam/ je gore" || { echo "✗ zdravlje vraća $ZDRAVLJE" >&2; exit 1; }
+[ "$JA" = "401" ] && [ "$CITAJ" = "401" ] && echo "✓ API je zaključan bez prijave" \
+  || { echo "✗ API bez prijave vraća $JA / $CITAJ (očekivano 401)" >&2; exit 1; }
 echo "✓ gotovo: https://demo.kyuro.tech/sajam/"

@@ -23,9 +23,9 @@ const POLJA = [
 const IZNOSI = new Set(POLJA.filter((p) => p.vrsta === 'iznos').map((p) => p.ime))
 
 const $ = (id) => document.getElementById(id)
-const KORACI = ['korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
+const KORACI = ['korak-prijava', 'korak-foto', 'korak-citanje', 'korak-racuni', 'korak-datoteka', 'korak-poslano']
 
-let stanje = { korak: 'korak-foto', sesija: null, racuni: [], uklonjen: null, otvoren: null }
+let stanje = { korak: 'korak-foto', prije: null, sesija: null, racuni: [], uklonjen: null, otvoren: null }
 
 function postavi(izmjene) {
   stanje = { ...stanje, ...izmjene }
@@ -42,6 +42,7 @@ function poruka(tekst) {
 }
 
 class GreskaPoslužitelja extends Error {}
+class GreskaPrijave extends GreskaPoslužitelja {}
 
 async function api(putanja, opcije) {
   let odgovor
@@ -50,7 +51,11 @@ async function api(putanja, opcije) {
   } catch {
     throw new TypeError('mreža')
   }
-  if (odgovor.status === 401) throw new GreskaPoslužitelja('Prijava je istekla. Osvježite stranicu.')
+  if (odgovor.status === 401 && !putanja.endsWith('api/prijava')) {
+    // Prijava je istekla: pokaži prijavu, a poslije se vrati točno gdje je Daniel stao.
+    if (stanje.korak !== 'korak-prijava') postavi({ korak: 'korak-prijava', prije: stanje.korak })
+    throw new GreskaPrijave('Prijavite se pa pokušajte ponovno.')
+  }
   if (!odgovor.ok) {
     const tijelo = await odgovor.json().catch(() => ({}))
     const detalj = typeof tijelo.detail === 'string' ? tijelo.detail : 'Nešto nije u redu. Pokušajte ponovno.'
@@ -343,10 +348,47 @@ function ispocetka() {
   postavi({ korak: 'korak-foto', sesija: null, racuni: [], uklonjen: null, otvoren: null })
 }
 
+// ── 0. prijava ──────────────────────────────────────────────────────────────
+async function prijaviSe(dogadaj) {
+  dogadaj.preventDefault()
+  const greskaEl = $('prijava-greska')
+  const lozinka = $('prijava-obrazac').elements.lozinka.value
+  if (!lozinka) {
+    greskaEl.textContent = 'Upišite lozinku.'
+    greskaEl.hidden = false
+    return
+  }
+  $('prijava-gumb').disabled = true
+  try {
+    await api('api/prijava', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lozinka }),
+    })
+    $('prijava-obrazac').reset()
+    greskaEl.hidden = true
+    poruka('')
+    postavi({ korak: stanje.prije || 'korak-foto', prije: null })
+  } catch (greska) {
+    greskaEl.textContent = greska instanceof TypeError ? 'Nema interneta.' : greska.message
+    greskaEl.hidden = false
+  } finally {
+    $('prijava-gumb').disabled = false
+  }
+}
+
+async function provjeriPrijavu() {
+  try {
+    await api('api/ja')
+  } catch {
+    // 401 je već prebacio na prijavu; bez mreže aplikacija ostaje otvorena (ljuska radi offline)
+  }
+}
+
 // ── iscrtavanje ─────────────────────────────────────────────────────────────
 function iscrtaj() {
   for (const id of KORACI) $(id).hidden = id !== stanje.korak
-  $('ispocetka').hidden = stanje.korak === 'korak-foto' || stanje.korak === 'korak-citanje'
+  $('ispocetka').hidden = ['korak-prijava', 'korak-foto', 'korak-citanje'].includes(stanje.korak)
   if (stanje.korak === 'korak-racuni') {
     iscrtajSazetak()
     $('racuni').replaceChildren(...stanje.racuni.map(iscrtajRacun))
@@ -365,6 +407,7 @@ $('obrazac').addEventListener('submit', posalji)
 $('isti-list').addEventListener('click', noviPosjetitelj)
 $('novi-list').addEventListener('click', ispocetka)
 $('ispocetka').addEventListener('click', ispocetka)
+$('prijava-obrazac').addEventListener('submit', prijaviSe)
 window.addEventListener('online', isprazniIzlaz)
 
 if ('serviceWorker' in navigator) {
@@ -372,3 +415,4 @@ if ('serviceWorker' in navigator) {
 }
 iscrtajIzlaz()
 iscrtaj()
+provjeriPrijavu()

@@ -3,7 +3,8 @@
 Što je: instalabilna mobilna aplikacija (PWA). Daniel fotografira list s računima i slipovima,
 Claude ih očita, aplikacija provjeri OIB i zbrojeve, složi **eURA.txt** za Synesis i pošalje
 posjetitelju mail (eURA.txt + CSV + fotografija). Posjetitelj ulazi u Attio kao lead.
-Živi na **https://demo.kyuro.tech/sajam/** (KVM1), pod istom lozinkom kao demo (korisnik `demo`).
+Živi na **https://demo.kyuro.tech/sajam/** (KVM1). Prijava u aplikaciji, ista lozinka kao demo
+(apr1 hash u .env), kolačić 60 dana. nginx osnovna autentikacija za /sajam/ je isključena.
 
 ## Gdje što živi
 ```

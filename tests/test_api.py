@@ -7,9 +7,10 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from passlib.hash import apr_md5_crypt
 from PIL import Image
 
-from app import crm, dnevnik, main, posta
+from app import crm, dnevnik, main, posta, prijava
 from app.model import Racun
 
 RACUN = Racun(
@@ -19,14 +20,22 @@ RACUN = Racun(
 )
 
 
+LOZINKA_HASH = apr_md5_crypt.hash("ispravna")
+
+
 @pytest.fixture
 def klijent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     for kljuc in ("ANTHROPIC_API_KEY", "BREVO_API_KEY", "ATTIO_API_KEY"):
         monkeypatch.setenv(kljuc, "test")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TEST_ADRESE", "daniel@test.hr")
+    monkeypatch.setenv("SAJAM_LOZINKA_HASH", LOZINKA_HASH)
+    monkeypatch.setenv("SAJAM_TAJNA", "tajna-za-test")
+    monkeypatch.setattr(main, "_brana_prijave", prijava.Brana())
     main.postavke.cache_clear()
-    yield TestClient(main.app)
+    klijent = TestClient(main.app, base_url="https://testserver")
+    assert klijent.post("/api/prijava", json={"lozinka": "ispravna"}).status_code == 200
+    yield klijent
     main.postavke.cache_clear()
 
 
@@ -139,3 +148,36 @@ def test_neispravno_slanje_se_odbija(
 ) -> None:
     monkeypatch.setattr(posta, "posalji", lambda _p, _poruka: pytest.fail("poslano"))
     assert klijent.post("/api/posalji", json=_slanje(**izmjena)).status_code in (400, 422)
+
+
+def test_bez_prijave_api_je_zatvoren(klijent: TestClient) -> None:
+    klijent.cookies.clear()
+    for putanja in ("/api/eura", "/api/provjeri", "/api/posalji"):
+        assert klijent.post(putanja, json={}).status_code == 401
+    assert klijent.get("/api/ja").status_code == 401
+    assert klijent.get("/api/zdravlje").status_code == 200
+
+
+def test_kriva_lozinka_i_brana(klijent: TestClient) -> None:
+    klijent.cookies.clear()
+    for _ in range(10):
+        assert klijent.post("/api/prijava", json={"lozinka": "kriva"}).status_code == 401
+    assert klijent.post("/api/prijava", json={"lozinka": "ispravna"}).status_code == 429
+
+
+def test_prijava_daje_trajni_sigurni_kolacic(klijent: TestClient) -> None:
+    klijent.cookies.clear()
+    odgovor = klijent.post("/api/prijava", json={"lozinka": "ispravna"})
+    kolacic = odgovor.headers["set-cookie"].lower()
+    assert "httponly" in kolacic and "secure" in kolacic and "samesite=strict" in kolacic
+    assert f"max-age={prijava.TRAJANJE_S}" in kolacic
+    assert klijent.get("/api/ja").status_code == 200
+
+
+def test_token_istekne_i_ne_da_se_krivotvoriti() -> None:
+    token = prijava.izdaj("tajna", sada=1000)
+    assert prijava.vrijedi(token, "tajna", sada=2000)
+    assert not prijava.vrijedi(token, "tajna", sada=1000 + prijava.TRAJANJE_S + 1)
+    assert not prijava.vrijedi(token, "druga-tajna", sada=2000)
+    istek, potpis = token.split(".")
+    assert not prijava.vrijedi(f"{int(istek) + 999}.{potpis}", "tajna", sada=2000)

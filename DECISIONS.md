@@ -8,3 +8,8 @@
 - Attio: posao „<tvrtka> — Accept sajam 2026" u fazi Lead, vrijednost prazna; postojeća osoba se ne prepisuje.
 - PWA (Daniel): ljuska radi offline; mail bez mreže čeka u lokalnom redu i šalje se kad se veza vrati.
 - Ključevi na KVM1 (`/home/daniel/kyuro-sajam/.env`) kopirani iz webinar-funnela uz Danielov pristanak (14.10.), samo za sajam. Poslije sajma: vlastiti ključevi (issue).
+
+## 2026-10-14 — prijava u aplikaciji umjesto nginx basic auth
+- Na iPhoneu je aplikacija s početnog zaslona čekala 10–15 s na okvir lozinke i nije pamtila prijavu.
+- Sada: ista lozinka kao demo (apr1 hash kopiran u .env), HttpOnly/Secure/SameSite=Strict kolačić 60 dana, 10 krivih pokušaja / 15 min.
+- Ljuska je javna i otvara se iz service workera (spremnik prvi); API bez prijave vraća 401.
