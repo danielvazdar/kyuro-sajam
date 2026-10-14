@@ -7,3 +7,4 @@
 - eURA emiter prenesen u Python 1:1 iz kyuro-demo; testovi drže iste položaje polja.
 - Attio: posao „<tvrtka> — Accept sajam 2026" u fazi Lead, vrijednost prazna; postojeća osoba se ne prepisuje.
 - PWA (Daniel): ljuska radi offline; mail bez mreže čeka u lokalnom redu i šalje se kad se veza vrati.
+- Ključevi na KVM1 (`/home/daniel/kyuro-sajam/.env`) kopirani iz webinar-funnela uz Danielov pristanak (14.10.), samo za sajam. Poslije sajma: vlastiti ključevi (issue).
