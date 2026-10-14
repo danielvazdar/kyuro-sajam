@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import re
 import threading
 import time
@@ -20,6 +21,7 @@ from typing import Annotated, Any
 import anthropic
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -220,3 +222,8 @@ def _u_attio(slanje: Slanje, p: Postavke) -> bool:
     dnevnik.upisi(p.data_dir, {"dogadaj": "attio_upisan", "email": slanje.email,
                                "osoba": osoba_id})
     return True
+
+
+# Samo za lokalni razvoj i e2e probu: u produkciji web/ poslužuje nginx.
+if os.getenv("SAJAM_WEB_DIR"):
+    app.mount("/", StaticFiles(directory=os.environ["SAJAM_WEB_DIR"], html=True), name="web")

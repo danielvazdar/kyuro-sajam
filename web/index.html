@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="hr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#f3f2ec">
+  <title>Kyuro · F1 računi</title>
+  <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+  <link rel="apple-touch-icon" href="ikone/apple-touch.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Kyuro F1">
+  <link rel="stylesheet" href="stil.css">
+</head>
+<body>
+  <header class="zaglavlje">
+    <span class="znak">Kyuro</span>
+    <span class="naslov">F1 · ulazni računi</span>
+    <button type="button" class="tekst-gumb" id="ispocetka" hidden>Ispočetka</button>
+  </header>
+
+  <main>
+    <!-- 1. Fotografija -->
+    <section id="korak-foto" class="korak">
+      <h1>Fotografirajte list s računima</h1>
+      <p class="tiho">Jedna fotografija, svi računi i slipovi odjednom.</p>
+      <label class="gumb glavni velik">
+        <input type="file" id="kamera" accept="image/*" capture="environment" hidden>
+        Fotografiraj
+      </label>
+      <label class="gumb sporedni">
+        <input type="file" id="galerija" accept="image/*" hidden>
+        Odaberi postojeću fotografiju
+      </label>
+    </section>
+
+    <!-- 1b. Čitanje -->
+    <section id="korak-citanje" class="korak" hidden>
+      <div class="skener">
+        <img id="pregled-foto" alt="Fotografija lista s računima">
+        <div class="zraka" aria-hidden="true"></div>
+      </div>
+      <p class="status" role="status" aria-live="polite">
+        <span id="citanje-tekst">Čitam račune…</span>
+        <span class="tnum" id="citanje-sekunde">0 s</span>
+      </p>
+    </section>
+
+    <!-- 2. Rezultati -->
+    <section id="korak-racuni" class="korak" hidden>
+      <div class="sazetak" id="sazetak"></div>
+      <ol class="racuni" id="racuni"></ol>
+      <p class="vrati" id="vrati-traka" hidden>
+        Uklonjen račun. <button type="button" class="tekst-gumb" id="vrati">Vrati</button>
+      </p>
+      <button type="button" class="gumb glavni velik" id="slozi">Složi eURA.txt</button>
+    </section>
+
+    <!-- 2b. Datoteka -->
+    <section id="korak-datoteka" class="korak" hidden>
+      <h2>eURA.txt za Synesis</h2>
+      <p class="tiho">Svaki redak je jedan račun, točno po Pupillinoj specifikaciji:
+        211 znakova, polja na fiksnim mjestima.</p>
+      <pre class="datoteka" id="datoteka" tabindex="0"></pre>
+      <div class="red-gumba">
+        <button type="button" class="gumb sporedni" id="natrag-racuni">Natrag na račune</button>
+        <a class="gumb sporedni" id="preuzmi" download="eURA.txt">Preuzmi</a>
+      </div>
+
+      <form id="obrazac" class="obrazac" novalidate>
+        <h2>Pošaljite si sve na mail</h2>
+        <label>E-mail <span class="obavezno">*</span>
+          <input type="email" name="email" autocomplete="email" inputmode="email" required>
+        </label>
+        <label>Ime i prezime
+          <input type="text" name="ime" autocomplete="name" maxlength="80">
+        </label>
+        <label>Ured / tvrtka
+          <input type="text" name="tvrtka" autocomplete="organization" maxlength="120">
+        </label>
+        <label class="privola">
+          <input type="checkbox" name="privola" required>
+          <span>Slažem se da mi Kyuro pošalje ove datoteke i javi se u vezi s
+            automatizacijom knjiženja. Podatke ne dijelimo s trećima.
+            <a href="https://kyuro.tech/privacy" target="_blank" rel="noopener">Privatnost</a></span>
+        </label>
+        <p class="greska" id="obrazac-greska" role="alert" hidden></p>
+        <button type="submit" class="gumb glavni velik" id="posalji">Pošalji</button>
+      </form>
+    </section>
+
+    <!-- 3. Poslano -->
+    <section id="korak-poslano" class="korak" hidden>
+      <div class="kvacica" aria-hidden="true">✓</div>
+      <h1>Poslano</h1>
+      <p id="poslano-tekst"></p>
+      <p class="tiho" id="poslano-attio" hidden>Lead nije upisan u Attio — ostao je u dnevniku
+        na poslužitelju.</p>
+      <button type="button" class="gumb glavni velik" id="isti-list">Isti računi, novi posjetitelj</button>
+      <button type="button" class="gumb sporedni" id="novi-list">Novi list</button>
+    </section>
+
+    <p class="greska" id="greska" role="alert" hidden></p>
+    <div class="izlaz" id="izlaz" hidden></div>
+  </main>
+
+  <template id="predlozak-racun">
+    <li class="racun">
+      <button type="button" class="racun-glava" aria-expanded="false">
+        <span class="racun-vrsta"></span>
+        <span class="racun-ime"></span>
+        <span class="racun-iznos tnum"></span>
+        <span class="racun-stanje"></span>
+      </button>
+      <div class="racun-detalji" hidden>
+        <ul class="racun-nalazi"></ul>
+        <div class="polja"></div>
+        <div class="red-gumba">
+          <button type="button" class="gumb sporedni ukloni">Ukloni</button>
+          <button type="button" class="gumb glavni spremi">Spremi izmjene</button>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
